@@ -1,0 +1,240 @@
+import { ObjectId } from 'mongodb';
+import { randomUUID } from 'crypto';
+import { getDb } from './client';
+import {
+  coerceStoredPlan,
+  type DayProgress,
+  type MealPlan,
+  type MealSlot,
+  type Order,
+  type OrderItem,
+  type OrderStatus,
+  type Profile,
+} from '../schemas';
+
+// users collection — _id is the mp_uid cookie value
+export interface UserDoc {
+  _id: string; // UUID
+  kind: 'google' | 'guest';
+  firebaseUid?: string;
+  email?: string;
+  displayName?: string;
+  profile?: Profile;
+  createdAt: string;
+}
+
+export interface PlanDoc {
+  _id: ObjectId;
+  userId: string;
+  plan: MealPlan;
+  generatedAt: string;
+}
+
+// One document per user per calendar date — which meal slots were eaten.
+export interface ProgressDoc {
+  _id: string; // `${userId}:${date}` — natural key, makes upserts race-safe
+  userId: string;
+  date: string; // "YYYY-MM-DD" local date
+  eaten: MealSlot[];
+}
+
+export interface OrderDoc {
+  _id: ObjectId;
+  userId: string;
+  items: OrderItem[];
+  status: OrderStatus;
+  createdAt: string;
+  deliveredAt?: string;
+}
+
+async function users() {
+  return (await getDb()).collection<UserDoc>('users');
+}
+async function plans() {
+  return (await getDb()).collection<PlanDoc>('plans');
+}
+async function progress() {
+  return (await getDb()).collection<ProgressDoc>('progress');
+}
+async function orders() {
+  return (await getDb()).collection<OrderDoc>('orders');
+}
+
+export async function findUser(uid: string): Promise<UserDoc | null> {
+  return (await users()).findOne({ _id: uid });
+}
+
+export async function createGuestUser(): Promise<UserDoc> {
+  const doc: UserDoc = {
+    _id: randomUUID(),
+    kind: 'guest',
+    createdAt: new Date().toISOString(),
+  };
+  await (await users()).insertOne(doc);
+  return doc;
+}
+
+// Google sign-in: find by firebaseUid; if a guest session already exists on
+// this device, upgrade that document so onboarding data done as a guest is kept.
+export async function findOrCreateGoogleUser(
+  google: { firebaseUid: string; email: string; displayName: string },
+  existingUid?: string
+): Promise<UserDoc> {
+  const col = await users();
+
+  const existing = await col.findOne({ firebaseUid: google.firebaseUid });
+  if (existing) return existing;
+
+  if (existingUid) {
+    const guest = await col.findOne({ _id: existingUid, kind: 'guest' });
+    if (guest) {
+      const upgraded = await col.findOneAndUpdate(
+        { _id: existingUid },
+        {
+          $set: {
+            kind: 'google' as const,
+            firebaseUid: google.firebaseUid,
+            email: google.email,
+            displayName: google.displayName,
+          },
+        },
+        { returnDocument: 'after' }
+      );
+      if (upgraded) return upgraded;
+    }
+  }
+
+  const doc: UserDoc = {
+    _id: randomUUID(),
+    kind: 'google',
+    firebaseUid: google.firebaseUid,
+    email: google.email,
+    displayName: google.displayName,
+    createdAt: new Date().toISOString(),
+  };
+  await col.insertOne(doc);
+  return doc;
+}
+
+export async function upsertProfile(uid: string, profile: Profile): Promise<boolean> {
+  const res = await (await users()).updateOne({ _id: uid }, { $set: { profile } });
+  return res.matchedCount > 0;
+}
+
+export async function latestPlan(uid: string): Promise<MealPlan | null> {
+  const doc = await (await plans())
+    .find({ userId: uid })
+    .sort({ generatedAt: -1 })
+    .limit(1)
+    .next();
+  return doc ? coerceStoredPlan(doc.plan) : null;
+}
+
+export async function insertPlan(uid: string, plan: MealPlan): Promise<void> {
+  await (await plans()).insertOne({
+    _id: new ObjectId(),
+    userId: uid,
+    plan,
+    generatedAt: plan.generatedAt,
+  });
+}
+
+// Overwrite the current (latest) plan in place — used by single-day
+// regeneration, which edits the plan rather than producing a new one.
+export async function replaceLatestPlan(uid: string, plan: MealPlan): Promise<boolean> {
+  const doc = await (await plans()).findOneAndUpdate(
+    { userId: uid },
+    { $set: { plan } },
+    { sort: { generatedAt: -1 }, returnDocument: 'after' }
+  );
+  return doc !== null;
+}
+
+// Plan history, newest first (the first entry is the current plan).
+export async function listPlans(uid: string, limit = 12): Promise<MealPlan[]> {
+  const docs = await (await plans())
+    .find({ userId: uid })
+    .sort({ generatedAt: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map((doc) => coerceStoredPlan(doc.plan));
+}
+
+// ── Day progress ────────────────────────────────────────────
+export async function listProgress(
+  uid: string,
+  from: string,
+  to: string
+): Promise<DayProgress[]> {
+  const docs = await (await progress())
+    .find({ userId: uid, date: { $gte: from, $lte: to } })
+    .sort({ date: 1 })
+    .toArray();
+  return docs.map(({ date, eaten }) => ({ date, eaten }));
+}
+
+export async function toggleProgress(
+  uid: string,
+  date: string,
+  slot: MealSlot,
+  eaten: boolean
+): Promise<DayProgress> {
+  const col = await progress();
+  const update = eaten
+    ? { $addToSet: { eaten: slot } as const }
+    : { $pull: { eaten: slot } as const };
+  const doc = await col.findOneAndUpdate(
+    { _id: `${uid}:${date}` },
+    { ...update, $setOnInsert: { userId: uid, date } },
+    { upsert: true, returnDocument: 'after' }
+  );
+  return { date, eaten: doc?.eaten ?? (eaten ? [slot] : []) };
+}
+
+// ── Orders ──────────────────────────────────────────────────
+function toOrder(doc: OrderDoc): Order {
+  return {
+    id: doc._id.toHexString(),
+    items: doc.items,
+    status: doc.status,
+    createdAt: doc.createdAt,
+    ...(doc.deliveredAt ? { deliveredAt: doc.deliveredAt } : {}),
+  };
+}
+
+export async function listOrders(uid: string, limit = 20): Promise<Order[]> {
+  const docs = await (await orders())
+    .find({ userId: uid })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map(toOrder);
+}
+
+export async function createOrder(uid: string, items: OrderItem[]): Promise<Order> {
+  const doc: OrderDoc = {
+    _id: new ObjectId(),
+    userId: uid,
+    items,
+    status: 'ordered',
+    createdAt: new Date().toISOString(),
+  };
+  await (await orders()).insertOne(doc);
+  return toOrder(doc);
+}
+
+export async function updateOrderStatus(
+  uid: string,
+  orderId: string,
+  status: OrderStatus
+): Promise<Order | null> {
+  if (!ObjectId.isValid(orderId)) return null;
+  const set: Partial<OrderDoc> = { status };
+  if (status === 'delivered') set.deliveredAt = new Date().toISOString();
+  const doc = await (await orders()).findOneAndUpdate(
+    { _id: new ObjectId(orderId), userId: uid },
+    { $set: set },
+    { returnDocument: 'after' }
+  );
+  return doc ? toOrder(doc) : null;
+}
