@@ -34,3 +34,6 @@ next-env.d.ts
 # IDE
 .idea/
 .vscode/
+
+# Silpo MCP local OAuth state and probe output
+/.silpo-*.local.json

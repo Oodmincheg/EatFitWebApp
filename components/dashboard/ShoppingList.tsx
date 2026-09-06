@@ -76,7 +76,7 @@ export function ShoppingList({
               onClick={() => onOrder(toBuy.map(({ name, grams }) => ({ name, grams })))}
               className="rounded-full bg-white px-5 py-3 text-[14.5px] font-bold whitespace-nowrap text-tomato transition-colors hover:bg-peach focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Build my grocery cart 🛒
+              Build my Silpo cart 🛒
             </button>
           )}
         </div>

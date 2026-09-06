@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import { ZakazCartBodySchema } from '@/lib/schemas';
+import { SilpoCartBodySchema } from '@/lib/schemas';
 import { BodyError, getUid, readJsonBody } from '@/lib/session';
-import { ZakazUpstreamError, buildCart } from '@/lib/zakaz';
+import { buildCart } from '@/lib/silpo/cart';
+import { silpoErrorResponse } from '@/lib/silpo/http';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60; // translation + N parallel searches
+export const maxDuration = 60; // translation + batch searches + LLM pick
 
-// POST /api/cart/zakaz { items, storeId? } → ZakazCart
-// Matches the shopping list against live Zakaz.ua products. Partial matches are
-// not an error: unmatched lines come back with product: null and a search link.
+// POST /api/cart/silpo { items } → SilpoCart (read-only: nothing is written
+// to the user's Silpo cart until /commit). Unmatched lines come back with
+// product: null.
 export async function POST(req: Request) {
   const uid = await getUid();
   if (!uid) {
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
     throw e;
   }
 
-  const parsed = ZakazCartBodySchema.safeParse(body);
+  const parsed = SilpoCartBodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'bad_request', issues: parsed.error.issues },
@@ -34,12 +35,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const cart = await buildCart(parsed.data.items, parsed.data.storeId);
+    const cart = await buildCart(uid, new URL(req.url).origin, parsed.data.items);
     return NextResponse.json(cart);
   } catch (err) {
-    if (err instanceof ZakazUpstreamError) {
-      return NextResponse.json({ error: 'upstream_error' }, { status: 502 });
-    }
-    return NextResponse.json({ error: 'server_error' }, { status: 500 });
+    return silpoErrorResponse(err);
   }
 }

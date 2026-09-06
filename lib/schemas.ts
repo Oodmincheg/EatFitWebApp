@@ -179,37 +179,89 @@ export const UpdateOrderBodySchema = z.object({
   status: OrderStatusSchema,
 });
 
-// ── Zakaz.ua real cart (matched, never persisted) ───────────
-export const ZakazCartBodySchema = z.object({
+// ── Silpo real cart (official MCP; matched, then written to the user's cart) ──
+export const SilpoCartBodySchema = z.object({
   items: z.array(OrderItemSchema).min(1).max(60),
-  storeId: z.string().min(1).max(40).optional(),
 });
 
-// A real product matched from Zakaz.ua's catalog.
-export interface ZakazProduct {
-  ean: string;
+export const SilpoCommitBodySchema = z.object({
+  cartId: z.string().min(1),
+  // Present when the cart's own delivery slot had expired; commit writes it first.
+  timeslot: z.object({ start: z.string(), end: z.string() }).optional(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.string().min(1),
+        companyId: z.string().min(1),
+        branchId: z.string().min(1),
+        quantity: z.number().positive(),
+      })
+    )
+    .min(1)
+    .max(60),
+});
+export type SilpoCommitBody = z.infer<typeof SilpoCommitBodySchema>;
+
+export interface SilpoProduct {
+  productId: string;
+  companyId: string;
+  branchId: string;
+  slug: string;
   title: string; // Ukrainian, from the catalog
-  priceKop: number; // kopecks (÷100 for UAH)
-  weightG: number | null; // grams, may be null
-  img: string | null; // s350x350 preferred
-  webUrl: string; // canonical product deep link
-  inStock: boolean;
+  price: number; // UAH; per kg when weighted, per pack otherwise
+  oldPrice: number | null; // UAH, set when discounted
+  weighted: boolean;
+  step: number; // kg increment when weighted, else 1
+  displayRatio: string | null; // pack content, e.g. "400г", "10шт"
+  stock: number; // kg when weighted, packs otherwise
+  img: string | null;
+  webUrl: string;
 }
 
-// One shopping-list line resolved to a product (or not).
-export interface CartLine {
-  query: string; // English source name (ShoppingItem.name)
+export interface SilpoCartLine {
+  query: string; // English source name
+  uaQuery: string; // what was searched on Silpo (for the manual-search fallback)
   neededGrams: number; // 0 = unknown
-  product: ZakazProduct | null;
-  quantity: number; // suggested packs; >=1
-  searchUrl: string; // prefilled store search (works matched or not)
+  product: SilpoProduct | null;
+  quantity: number; // kg when weighted, packs otherwise
+  lineTotal: number; // UAH
 }
 
-export interface ZakazCart {
-  store: { id: string; chain: string; name: string; home: string; searchBase: string };
-  lines: CartLine[]; // one per input item, in input order
+export interface SilpoCart {
+  cartId: string;
+  branchId: string;
+  deliveryType: string;
+  // The slot the searches ran against. `stale` = the cart's own slot had
+  // expired and this replacement must be written on commit.
+  timeslot: { start: string; end: string; stale: boolean };
+  delivery: { minOrderCost: number; deliveryCost: number | null };
+  lines: SilpoCartLine[];
   matchedCount: number;
-  totalKop: number; // Σ matched priceKop * quantity
+  total: number; // UAH, Σ lineTotal
+}
+
+export interface SilpoValidation {
+  level: string; // "error" | "warning" | "info"
+  type: string;
+  message: string;
+}
+
+export interface SilpoLoyalty {
+  bonusAvailable: number;
+  bonusTotal: number;
+  bonusRequested: number | null;
+  isEnabled: boolean;
+}
+
+export interface SilpoCommitResult {
+  cartId: string;
+  total: number;
+  totalAfterDiscounts: number;
+  itemCount: number;
+  validations: SilpoValidation[];
+  loyalty: SilpoLoyalty | null;
+  checkoutWebLink: string | null;
+  checkoutMobileLink: string | null;
 }
 
 // Client-facing order shape (id is the Mongo ObjectId as hex).

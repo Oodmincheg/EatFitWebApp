@@ -1,27 +1,22 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShoppingList } from '@/components/dashboard/ShoppingList';
-import { StorePicker } from '@/components/dashboard/StorePicker';
 import { useSession } from '@/hooks/useSession';
-import { PENDING_CART_KEY, type StoreOption } from '@/lib/stores';
+import { PENDING_CART_KEY } from '@/lib/stores';
 import type { OrderItem } from '@/lib/schemas';
 
 export default function IngredientsPage() {
   const { profile, plan } = useSession();
   const router = useRouter();
-  const [pending, setPending] = useState<OrderItem[] | null>(null);
 
   if (!profile) return null;
 
-  const pickStore = (store: StoreOption) => {
+  // Hand the to-buy list to the Cart page, which matches it against Silpo.
+  const buildCart = (items: OrderItem[]) => {
     try {
-      sessionStorage.setItem(
-        PENDING_CART_KEY,
-        JSON.stringify({ items: pending, storeId: store.id })
-      );
+      sessionStorage.setItem(PENDING_CART_KEY, JSON.stringify({ items }));
     } catch {
       // Storage unavailable — the Cart page will show its empty state.
     }
@@ -38,7 +33,7 @@ export default function IngredientsPage() {
       </div>
 
       {plan ? (
-        <ShoppingList plan={plan} ownedRaw={profile.ingredients} onOrder={setPending} />
+        <ShoppingList plan={plan} ownedRaw={profile.ingredients} onOrder={buildCart} />
       ) : (
         <div className="rounded-3xl border-2 border-dashed border-sand py-12 text-center">
           <p className="text-3xl" aria-hidden="true">
@@ -56,8 +51,6 @@ export default function IngredientsPage() {
           </p>
         </div>
       )}
-
-      <StorePicker open={pending !== null} onPick={pickStore} onClose={() => setPending(null)} />
     </>
   );
 }
