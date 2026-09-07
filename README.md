@@ -45,6 +45,10 @@ Collections and indexes are created automatically on first use — no migrations
 - `POST /api/generate-plan` takes no body — the server loads the profile from the DB,
   prompts LiteLLM, validates the JSON with zod (one corrective retry), recomputes
   daily totals, persists the plan, and returns it.
+- UI language: Ukrainian by default, English via the UA/EN toggle. Dictionaries live in
+  `lib/i18n/{uk,en}.ts` (`uk` is the typed source of truth), the choice is a plain
+  `eatfit_locale` cookie read by the root layout for `<html lang>` and by the generation
+  routes, so menus are written in the same language as the UI.
 - The shopping list is derived client-side (`lib/shopping.ts`) — never persisted.
 - `POST /api/cart/silpo` matches the to-buy list against Silpo's live catalog through
   the MCP (`lib/silpo/cart.ts`): resolves the user's cart and a live delivery slot,

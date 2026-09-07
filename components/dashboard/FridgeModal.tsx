@@ -4,8 +4,9 @@ import { ClipboardEvent, useEffect, useRef, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
+import { useI18n } from '@/hooks/useI18n';
 import { FRIDGE_DRAFT_KEY } from '@/lib/clientStorage';
-import { TAG_OPTIONS } from '@/lib/dietary';
+import { DIETARY_TAGS } from '@/lib/dietary';
 import type { DietaryTag } from '@/lib/schemas';
 
 const MAX_LENGTH = 2000;
@@ -25,7 +26,7 @@ function readDraft(): { value: string; tags: DietaryTag[] } | null {
     ) {
       return null;
     }
-    const known = new Set(TAG_OPTIONS.map((t) => t.value));
+    const known = new Set<DietaryTag>(DIETARY_TAGS);
     const { value, tags } = parsed as { value: string; tags: unknown[] };
     return {
       value: value.slice(0, MAX_LENGTH),
@@ -103,10 +104,11 @@ export function FridgeModal({
   onCancel: () => void;
   onGenerate: (ingredients: string, dietaryTags: DietaryTag[]) => void;
 }) {
+  const { t } = useI18n();
   const [value, setValue] = useState(initial);
   const [tags, setTags] = useState<DietaryTag[]>(initialTags);
   const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<'noFood' | 'readFailed' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Re-seed each time the dialog opens: an unconfirmed draft from this
@@ -146,12 +148,12 @@ export function FridgeModal({
       const data: { items?: string[] } = await res.json();
       const items = (data.items ?? []).filter((i) => typeof i === 'string');
       if (!items.length) {
-        setScanError('No food found in that photo. Try a clearer shot.');
+        setScanError('noFood');
         return;
       }
       setValue((prev) => mergeItems(prev, items));
     } catch {
-      setScanError('Could not read that photo. Try another one.');
+      setScanError('readFailed');
     } finally {
       setScanning(false);
     }
@@ -171,23 +173,20 @@ export function FridgeModal({
   return (
     <Modal open={open} onClose={onCancel} labelledBy="fridge-modal-title">
       <h2 id="fridge-modal-title" className="font-display text-xl font-extrabold">
-        What’s in your fridge?
+        {t.fridge.title}
       </h2>
-      <p className="mt-1 text-sm font-semibold text-latte">
-        The menu is built around these first; gaps are filled with common
-        groceries. Leave empty to start from scratch.
-      </p>
+      <p className="mt-1 text-sm font-semibold text-latte">{t.fridge.text}</p>
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onPaste={onPaste}
-        placeholder="chicken, buckwheat, eggs, tomatoes"
+        placeholder={t.fridge.placeholder}
         rows={5}
         maxLength={MAX_LENGTH}
         autoFocus
         disabled={scanning}
         className="mt-4 w-full rounded-xl border-2 border-peach-line bg-white px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none disabled:bg-peach/30"
-        aria-label="Ingredients you already have"
+        aria-label={t.fridge.aria}
       />
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <input
@@ -206,36 +205,32 @@ export function FridgeModal({
           onClick={() => fileInputRef.current?.click()}
           disabled={scanning}
         >
-          {scanning ? 'Reading your photo…' : '📷 Scan a fridge photo'}
+          {scanning ? t.fridge.scanning : t.fridge.scan}
         </Button>
         {!scanning && (
-          <span className="text-xs font-semibold text-latte">
-            or paste an image into the field
-          </span>
+          <span className="text-xs font-semibold text-latte">{t.fridge.orPaste}</span>
         )}
       </div>
       {scanError && (
         <p role="alert" className="mt-2 text-xs font-bold text-tomato">
-          {scanError}
+          {t.fridge[scanError]}
         </p>
       )}
-      <h3 className="mt-5 font-display text-sm font-extrabold">Dietary preferences</h3>
-      <p className="mt-0.5 text-xs font-semibold text-latte">
-        Every generated menu strictly respects these.
-      </p>
+      <h3 className="mt-5 font-display text-sm font-extrabold">{t.fridge.prefsTitle}</h3>
+      <p className="mt-0.5 text-xs font-semibold text-latte">{t.fridge.prefsText}</p>
       <div className="mt-2.5 flex flex-wrap gap-2">
-        {TAG_OPTIONS.map((t) => (
+        {DIETARY_TAGS.map((tag) => (
           <Chip
-            key={t.value}
-            label={t.label}
-            selected={tags.includes(t.value)}
-            onClick={() => toggleTag(t.value)}
+            key={tag}
+            label={t.dietary[tag]}
+            selected={tags.includes(tag)}
+            onClick={() => toggleTag(tag)}
           />
         ))}
       </div>
       <div className="mt-8 flex justify-end gap-3">
         <Button variant="secondary" onClick={onCancel}>
-          Cancel
+          {t.common.cancel}
         </Button>
         <Button
           onClick={() => {
@@ -244,7 +239,7 @@ export function FridgeModal({
           }}
           disabled={scanning}
         >
-          Generate my week 🎲
+          {t.fridge.generate}
         </Button>
       </div>
     </Modal>

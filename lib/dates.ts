@@ -57,15 +57,13 @@ export function eatenByDayName(
   ) as Record<DayName, MealSlot[]>;
 }
 
-export function formatDay(key: string): string {
-  return parseDateKey(key).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
+// `intl` is the BCP 47 tag of the active UI language (t.intl).
+export function formatDay(key: string, intl: string): string {
+  return parseDateKey(key).toLocaleDateString(intl, { month: 'short', day: 'numeric' });
 }
 
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
+export function formatDateTime(iso: string, intl: string): string {
+  return new Date(iso).toLocaleString(intl, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',

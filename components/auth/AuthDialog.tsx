@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { firebaseAvailable, signInWithGoogle } from '@/lib/firebase';
 
 export function AuthDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useI18n();
   const { profile, startGuest, startGoogle } = useSession();
   const [busy, setBusy] = useState(false);
 
@@ -24,7 +26,7 @@ export function AuthDialog({ open, onClose }: { open: boolean; onClose: () => vo
       await startGuest();
       routeAfterAuth(false);
     } catch {
-      toast('Could not start a session. Try again.');
+      toast(t.auth.sessionFailed);
       setBusy(false);
     }
   };
@@ -39,7 +41,7 @@ export function AuthDialog({ open, onClose }: { open: boolean; onClose: () => vo
       routeAfterAuth(Boolean(me?.profile ?? profile));
     } catch {
       // popup closed/blocked or Firebase error → non-blocking toast, stay here
-      toast('Google sign-in was cancelled or blocked. You can continue as guest.');
+      toast(t.auth.googleFailed);
       setBusy(false);
     }
   };
@@ -47,27 +49,25 @@ export function AuthDialog({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <Modal open={open} onClose={onClose} labelledBy="auth-title">
       <h2 id="auth-title" className="font-display text-2xl font-extrabold">
-        Get started
+        {t.auth.title}
       </h2>
-      <p className="mt-1 text-sm text-latte">
-        Sign in to save your plan, or jump straight in as a guest.
-      </p>
+      <p className="mt-1 text-sm text-latte">{t.auth.text}</p>
       <div className="mt-5 flex flex-col gap-3">
         {firebaseAvailable && (
           <Button variant="secondary" onClick={handleGoogle} disabled={busy}>
             <GoogleIcon />
-            Continue with Google
+            {t.auth.google}
           </Button>
         )}
         <Button onClick={handleGuest} disabled={busy}>
-          Continue as guest
+          {t.auth.guest}
         </Button>
       </div>
       <button
         onClick={onClose}
         className="mt-4 text-sm font-semibold text-latte hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato"
       >
-        Cancel
+        {t.common.cancel}
       </button>
     </Modal>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { CSSProperties } from 'react';
+import { useI18n } from '@/hooks/useI18n';
 import { Reveal } from './Reveal';
 
 const SPRINKLES: { emoji: string; className: string; delay: number }[] = [
@@ -11,6 +12,8 @@ const SPRINKLES: { emoji: string; className: string; delay: number }[] = [
 ];
 
 export function Cta({ onCta }: { onCta: () => void }) {
+  const { t } = useI18n();
+  const cta = t.landing.cta;
   return (
     <section className="px-4 pb-16 sm:pb-20">
       <Reveal>
@@ -30,17 +33,14 @@ export function Cta({ onCta }: { onCta: () => void }) {
             </span>
           ))}
           <h2 className="font-display text-3xl font-extrabold tracking-tight text-white text-balance sm:text-4xl">
-            Your week of meals, planned in 2 minutes
+            {cta.title}
           </h2>
-          <p className="mx-auto mt-3 max-w-lg text-white/85">
-            Stop staring at the fridge. Let AI turn what you have into a plan you’ll actually
-            follow.
-          </p>
+          <p className="mx-auto mt-3 max-w-lg text-white/85">{cta.text}</p>
           <button
             onClick={onCta}
             className="mt-8 inline-flex items-center justify-center rounded-full bg-white px-8 py-3.5 text-base font-bold text-tomato transition-all hover:scale-105 hover:bg-peach hover:animate-[wiggle_0.4s_ease-in-out] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            Plan my week 🍽️
+            {cta.button}
           </button>
         </div>
       </Reveal>

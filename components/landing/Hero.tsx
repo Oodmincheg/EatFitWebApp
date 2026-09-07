@@ -2,6 +2,7 @@
 
 import { CSSProperties, MouseEvent, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { useI18n } from '@/hooks/useI18n';
 import { LandingImage } from './LandingImage';
 import { LANDING_IMAGES } from './images';
 
@@ -45,6 +46,8 @@ function useCountUp(target: number, duration = 1300, delay = 650) {
 }
 
 export function Hero({ onCta }: { onCta: () => void }) {
+  const { t } = useI18n();
+  const hero = t.landing.hero;
   const kcal = useCountUp(1850);
 
   // Cursor parallax: write normalized coords to CSS vars, bites translate off them.
@@ -91,15 +94,15 @@ export function Hero({ onCta }: { onCta: () => void }) {
             className="anim-rise inline-flex -rotate-1 items-center gap-2 rounded-full bg-peach px-4 py-2 text-[13px] font-bold text-tomato"
             style={stagger(0)}
           >
-            🍅 dinner sorted, all week
+            {hero.badge}
           </span>
           <h1
             className="anim-rise mt-5 font-display text-5xl font-extrabold leading-[0.98] tracking-tight text-balance sm:text-6xl"
             style={stagger(1)}
           >
-            Cook what’s{' '}
+            {hero.titleBefore}
             <span className="relative inline-block text-tomato">
-              already
+              {hero.titleHighlight}
               <svg
                 aria-hidden="true"
                 className="absolute -bottom-2 left-0 w-full"
@@ -116,33 +119,32 @@ export function Hero({ onCta }: { onCta: () => void }) {
                   strokeLinecap="round"
                 />
               </svg>
-            </span>{' '}
-            in your fridge.
+            </span>
+            {hero.titleAfter}
           </h1>
           <p
             className="anim-rise mx-auto mt-5 max-w-md text-lg leading-normal text-latte lg:mx-0"
             style={stagger(2)}
           >
-            Tell EatFit your goal and what you’ve got. Get a fun, calorie-smart week of meals —
-            and we’ll grab the rest from the shop.
+            {hero.text}
           </p>
           <div
             className="anim-rise mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start"
             style={stagger(3)}
           >
             <Button className="px-7 py-3.5 text-base hover:scale-[1.04]" onClick={onCta}>
-              Generate my plan →
+              {hero.cta}
             </Button>
             <Button
               variant="secondary"
               className="px-6 py-3.5 text-base hover:scale-[1.04]"
               onClick={onCta}
             >
-              Peek as guest
+              {hero.guest}
             </Button>
           </div>
           <p className="anim-rise mt-6 text-sm font-medium text-sand" style={stagger(4)}>
-            No credit card · Works as a guest
+            {hero.note}
           </p>
         </div>
 
@@ -151,6 +153,7 @@ export function Hero({ onCta }: { onCta: () => void }) {
             <div className="rotate-2 transition-transform duration-500 ease-out hover:rotate-0 hover:scale-[1.02]">
               <LandingImage
                 slot={LANDING_IMAGES.hero}
+                alt={hero.imageAlt}
                 priority
                 sizes="(max-width: 1024px) 90vw, 45vw"
                 className="aspect-square w-full rounded-[26px] border-2 border-ink"
@@ -164,9 +167,9 @@ export function Hero({ onCta }: { onCta: () => void }) {
           >
             <div className="anim-float -rotate-6 rounded-2xl border-2 border-ink bg-lime px-4 py-3 text-white">
               <p className="font-display text-2xl font-extrabold leading-none tabular-nums">
-                {kcal.toLocaleString('en-US')}
+                {kcal.toLocaleString(t.intl)}
               </p>
-              <p className="mt-1 text-[11px] font-bold">kcal / day 🎯</p>
+              <p className="mt-1 text-[11px] font-bold">{hero.kcalPerDay}</p>
             </div>
           </div>
           <div
@@ -177,7 +180,7 @@ export function Hero({ onCta }: { onCta: () => void }) {
               className="anim-float rotate-3 rounded-2xl border-2 border-ink bg-white px-4 py-2.5"
               style={{ '--d': '0.7s' } as CSSProperties}
             >
-              <p className="text-[13px] font-bold">🛒 6 items · 1 tap</p>
+              <p className="text-[13px] font-bold">{hero.sticker}</p>
             </div>
           </div>
         </div>

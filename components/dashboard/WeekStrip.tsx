@@ -1,5 +1,6 @@
 'use client';
 
+import { useI18n } from '@/hooks/useI18n';
 import { addDays, dateKey, weekStart } from '@/lib/dates';
 import { DAY_NAMES, type MealSlot } from '@/lib/schemas';
 
@@ -11,6 +12,7 @@ export function WeekStrip({
   byDate: Record<string, MealSlot[]>;
   todayKey: string;
 }) {
+  const { t } = useI18n();
   const monday = weekStart(new Date());
 
   return (
@@ -26,10 +28,10 @@ export function WeekStrip({
             className={`flex flex-1 flex-col items-center gap-1.5 rounded-xl border-2 px-1 py-2 ${
               isToday ? 'border-ink bg-peach' : 'border-transparent'
             } ${isFuture ? 'opacity-45' : ''}`}
-            aria-label={`${name}: ${eaten} of 3 meals eaten`}
+            aria-label={t.today.stripAria(t.days[name].label, eaten)}
           >
-            <span className="text-[10px] font-bold tracking-wide text-latte">
-              {name.slice(0, 3).toUpperCase()}
+            <span className="text-[10px] font-bold tracking-wide text-latte uppercase">
+              {t.days[name].short}
             </span>
             <span className="flex gap-1" aria-hidden="true">
               {[0, 1, 2].map((dot) => (

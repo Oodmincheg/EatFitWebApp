@@ -131,8 +131,8 @@ async function liteLlmJson(system: string, user: string, timeoutMs: number): Pro
 }
 
 const TRANSLATE_PROMPT =
-  'You translate grocery item names from English to Ukrainian for a supermarket catalog ' +
-  'search. Reply with JSON only: {"items": [{"uk": "Ukrainian search term", "cat": "food ' +
+  'You turn grocery item names (English or Ukrainian) into Ukrainian supermarket catalog ' +
+  'search terms. Reply with JSON only: {"items": [{"uk": "Ukrainian search term", "cat": "food ' +
   'category"}, ...]} in the same order as the input. Use singular common nouns, no ' +
   'quantities, no brands. Prefer the bare product noun; drop preparation adjectives like ' +
   '"заморожений"/"консервований"/"сушений" (they break the catalog search; "cat" conveys ' +
@@ -203,8 +203,8 @@ export function parsePicks(parsed: unknown, candidateCounts: number[]): number[]
 }
 
 const PICK_PROMPT =
-  'You pick supermarket products for recipe ingredients. For each item you get the English ' +
-  'ingredient name, the store department it belongs to, and candidate products (Ukrainian ' +
+  'You pick supermarket products for recipe ingredients. For each item you get the ' +
+  'ingredient name (English or Ukrainian), the store department it belongs to, and candidate products (Ukrainian ' +
   'titles, prices in UAH, unit = "per kg" or the pack content). Reply with JSON only: ' +
   '{"picks": [one candidate index per item, same order]}. Choose the plain, unflavoured, ' +
   'unprocessed variant closest to the raw ingredient, preferring a pack size near ' +

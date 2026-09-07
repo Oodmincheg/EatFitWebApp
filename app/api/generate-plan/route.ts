@@ -3,6 +3,7 @@ import { getUid, readJsonBody } from '@/lib/session';
 import { findUser, insertPlan } from '@/lib/db/queries';
 import { GenerationFailedError, UpstreamError, generateMealPlan } from '@/lib/llm';
 import { dateKey, parseDateKey } from '@/lib/dates';
+import { getLocale } from '@/lib/i18n/server';
 import { GeneratePlanBodySchema } from '@/lib/schemas';
 
 export const runtime = 'nodejs';
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const plan = await generateMealPlan(profile, startDate);
+    const plan = await generateMealPlan(profile, startDate, await getLocale());
     await insertPlan(uid, plan);
     return NextResponse.json(plan);
   } catch (err) {

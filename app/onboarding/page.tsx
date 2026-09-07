@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { calorieTarget } from '@/lib/calories';
 import type { Goal, ProfileInput } from '@/lib/schemas';
@@ -48,6 +49,7 @@ function reducer(state: WizardState, action: Action): WizardState {
 export default function OnboardingPage() {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useI18n();
   const { loading, user, profile, saveProfile } = useSession();
   const [state, dispatch] = useReducer(reducer, initialState);
   const [paramErrors, setParamErrors] = useState<ParamsErrors>({});
@@ -64,7 +66,7 @@ export default function OnboardingPage() {
   }, [loading, user, profile, saving, router]);
 
   if (loading || !user || (profile && !saving)) {
-    return <main className="p-8 text-center text-sm font-medium text-sand">Loading…</main>;
+    return <main className="p-8 text-center text-sm font-medium text-sand">{t.common.loading}</main>;
   }
 
   const next = () => {
@@ -99,7 +101,7 @@ export default function OnboardingPage() {
       await saveProfile(toInput());
       router.push('/dashboard');
     } catch {
-      toast('Could not save your profile. Try again.');
+      toast(t.onboarding.saveFailed);
       setSaving(false);
     }
   };
@@ -110,20 +112,20 @@ export default function OnboardingPage() {
       <Card className="mt-6 sm:p-8">
         {target !== null ? (
           <div className="text-center">
-            <h2 className="font-display text-2xl font-extrabold">You’re all set!</h2>
-            <p className="mt-4 text-latte">Your daily target:</p>
+            <h2 className="font-display text-2xl font-extrabold">{t.onboarding.doneTitle}</h2>
+            <p className="mt-4 text-latte">{t.onboarding.yourTarget}</p>
             <div className="mt-3 inline-block -rotate-1 rounded-[20px] border-2 border-ink bg-lime px-6 py-4 text-white">
-              <p className="text-[11px] font-bold tracking-wider">YOUR DAILY TARGET</p>
+              <p className="text-[11px] font-bold tracking-wider">{t.onboarding.targetLabel}</p>
               <p className="font-display text-[42px] font-extrabold leading-none">
-                {target.toLocaleString('en-US')} <span className="text-base">kcal</span>
+                {target.toLocaleString(t.intl)} <span className="text-base">{t.units.kcal}</span>
               </p>
             </div>
             <div className="mt-6 flex justify-center gap-3">
               <Button variant="secondary" onClick={() => setTarget(null)} disabled={saving}>
-                Back
+                {t.common.back}
               </Button>
               <Button onClick={confirm} disabled={saving}>
-                {saving ? 'Saving…' : 'Go to my dashboard'}
+                {saving ? t.onboarding.saving : t.onboarding.toDashboard}
               </Button>
             </div>
           </div>
@@ -145,14 +147,14 @@ export default function OnboardingPage() {
                 onClick={() => dispatch({ type: 'step', step: 1 })}
                 disabled={state.step === 1}
               >
-                Back
+                {t.common.back}
               </Button>
               {state.step < 2 ? (
                 <Button onClick={next} disabled={!state.goal}>
-                  Next
+                  {t.common.next}
                 </Button>
               ) : (
-                <Button onClick={finish}>Finish</Button>
+                <Button onClick={finish}>{t.onboarding.finish}</Button>
               )}
             </div>
           </>

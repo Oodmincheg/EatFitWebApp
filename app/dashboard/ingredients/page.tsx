@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShoppingList } from '@/components/dashboard/ShoppingList';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { PENDING_CART_KEY } from '@/lib/stores';
 import type { OrderItem } from '@/lib/schemas';
 
 export default function IngredientsPage() {
+  const { t } = useI18n();
   const { profile, plan } = useSession();
   const router = useRouter();
 
@@ -26,10 +28,8 @@ export default function IngredientsPage() {
   return (
     <>
       <div>
-        <h1 className="font-display text-2xl font-extrabold">Ingredients</h1>
-        <p className="mt-0.5 text-sm font-semibold text-latte">
-          Groceries for your current menu — tick off what you&rsquo;ve got, then build a cart.
-        </p>
+        <h1 className="font-display text-2xl font-extrabold">{t.ingredients.title}</h1>
+        <p className="mt-0.5 text-sm font-semibold text-latte">{t.ingredients.subtitle}</p>
       </div>
 
       {plan ? (
@@ -39,15 +39,15 @@ export default function IngredientsPage() {
           <p className="text-3xl" aria-hidden="true">
             🥕
           </p>
-          <p className="mt-3 font-display text-lg font-extrabold">Nothing to buy yet</p>
+          <p className="mt-3 font-display text-lg font-extrabold">{t.ingredients.empty}</p>
           <p className="mt-1 text-sm text-latte">
             <Link
               href="/dashboard/plan"
               className="font-bold text-tomato underline-offset-2 hover:underline"
             >
-              Generate a weekly menu
-            </Link>{' '}
-            to build your shopping list.
+              {t.ingredients.emptyLink}
+            </Link>
+            {t.ingredients.emptyText}
           </p>
         </div>
       )}

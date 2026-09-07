@@ -143,3 +143,29 @@ describe('formatWeight', () => {
     expect(formatWeight(0)).toBe('');
   });
 });
+
+describe('ukrainian ingredients', () => {
+  it('categorizes stems regardless of inflection', () => {
+    expect(categorize('куряче філе')).toBe('meat-fish');
+    expect(categorize('помідори')).toBe('produce');
+    expect(categorize('яйця курячі')).toBe('dairy-eggs');
+    expect(categorize('гречка')).toBe('grains');
+    expect(categorize('олія оливкова')).toBe('pantry');
+    expect(categorize('кава')).toBe('pantry');
+    expect(categorize('кавун')).toBe('produce');
+    expect(categorize('сироп')).toBe('pantry');
+    expect(categorize('сир')).toBe('dairy-eggs');
+  });
+
+  it('matches owned items across inflections', () => {
+    expect(isOwned('помідори', ['помідор'])).toBe(true);
+    expect(isOwned('яйце', ['яйця'])).toBe(true);
+    expect(isOwned('картопля', ['картоплі'])).toBe(true);
+    expect(isOwned('рис', ['риба'])).toBe(false);
+  });
+
+  it('formats weight with the given units', () => {
+    expect(formatWeight(650, { g: 'г', kg: 'кг' })).toBe('650 г');
+    expect(formatWeight(1250, { g: 'г', kg: 'кг' })).toBe('1.3 кг');
+  });
+});

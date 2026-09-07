@@ -2,7 +2,10 @@ import type { Metadata } from 'next';
 import { Bricolage_Grotesque, Instrument_Sans, Space_Mono } from 'next/font/google';
 import './globals.css';
 import { SessionProvider } from '@/hooks/useSession';
+import { I18nProvider } from '@/hooks/useI18n';
 import { ToastProvider } from '@/components/ui/Toast';
+import { DICTIONARIES } from '@/lib/i18n';
+import { getLocale } from '@/lib/i18n/server';
 
 const instrumentSans = Instrument_Sans({
   subsets: ['latin'],
@@ -18,20 +21,23 @@ const spaceMono = Space_Mono({
   variable: '--font-space-mono',
 });
 
-export const metadata: Metadata = {
-  title: 'EatFit',
-  description: 'Fun, calorie-smart weekly meal plans from what’s already in your fridge',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { meta } = DICTIONARIES[await getLocale()];
+  return { title: meta.title, description: meta.description };
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body
         className={`${instrumentSans.variable} ${bricolage.variable} ${spaceMono.variable} min-h-screen bg-cream font-sans text-ink antialiased`}
       >
-        <ToastProvider>
-          <SessionProvider>{children}</SessionProvider>
-        </ToastProvider>
+        <I18nProvider initial={locale}>
+          <ToastProvider>
+            <SessionProvider>{children}</SessionProvider>
+          </ToastProvider>
+        </I18nProvider>
       </body>
     </html>
   );

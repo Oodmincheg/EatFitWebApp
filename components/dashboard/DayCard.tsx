@@ -3,14 +3,15 @@
 import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { useI18n } from '@/hooks/useI18n';
 import { formatWeight } from '@/lib/shopping';
 import type { DayPlan, Meal, MealSlot } from '@/lib/schemas';
 
-const MEAL_ROWS = [
-  { slot: 'breakfast', label: '🍳 BREAKFAST', accent: 'text-tomato' },
-  { slot: 'lunch', label: '🥗 LUNCH', accent: 'text-lime-deep' },
-  { slot: 'dinner', label: '🍲 DINNER', accent: 'text-tomato-deep' },
-] as const;
+const MEAL_ROWS: { slot: MealSlot; accent: string }[] = [
+  { slot: 'breakfast', accent: 'text-tomato' },
+  { slot: 'lunch', accent: 'text-lime-deep' },
+  { slot: 'dinner', accent: 'text-tomato-deep' },
+];
 
 function mealWeight(meal: Meal): number {
   return meal.ingredients.reduce((sum, i) => sum + i.grams, 0);
@@ -41,6 +42,8 @@ export function DayCard({
   onRegenerate?: (preference: string) => void;
   regenerating?: boolean;
 }) {
+  const { t } = useI18n();
+  const dayText = t.days[day.day];
   const offTarget = Math.abs(day.total_kcal - target) > target * 0.1;
   const macros = dayMacros(day);
   const [openSlot, setOpenSlot] = useState<MealSlot | null>(null);
@@ -48,21 +51,22 @@ export function DayCard({
   const [preference, setPreference] = useState('');
   const openRow = MEAL_ROWS.find((r) => r.slot === openSlot);
   const openMeal = openSlot ? day.meals[openSlot] : null;
+  const openMacros = openMeal ? mealMacros(openMeal) : null;
 
   return (
     <div className="flex flex-col rounded-2xl border-2 border-ink bg-white p-3">
       <div className="flex items-baseline justify-between">
         <div className="flex items-center gap-1">
-          <h3 className="font-display text-[15px] font-extrabold" title={day.day}>
-            {day.day.slice(0, 3)}
+          <h3 className="font-display text-[15px] font-extrabold" title={dayText.label}>
+            {dayText.short}
           </h3>
           {onRegenerate && (
             <button
               onClick={() => setRegenOpen(true)}
               disabled={regenerating}
               className="cursor-pointer rounded-full p-0.5 text-[13px] leading-none hover:bg-cream focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato disabled:cursor-not-allowed"
-              aria-label={`Regenerate ${day.day}`}
-              title={regenerating ? 'Cooking…' : `Regenerate ${day.day}`}
+              aria-label={t.day.regenerateAria(dayText.acc)}
+              title={regenerating ? t.day.cooking : t.day.regenerateAria(dayText.acc)}
             >
               <span
                 aria-hidden="true"
@@ -78,9 +82,7 @@ export function DayCard({
             offTarget ? 'rounded bg-apricot px-1 text-tomato-deep' : 'text-lime-deep'
           }`}
           title={
-            offTarget
-              ? `${day.total_kcal} kcal — outside target ±10% (${target} kcal)`
-              : `${day.total_kcal} kcal`
+            offTarget ? t.day.offTarget(day.total_kcal, target) : t.day.kcalTitle(day.total_kcal)
           }
         >
           {day.total_kcal}
@@ -89,15 +91,15 @@ export function DayCard({
       {macros && (
         <p
           className="mt-1 font-mono text-[10px] font-bold text-latte"
-          title={`protein ${macros.p} g · fat ${macros.f} g · carbs ${macros.c} g`}
+          title={t.day.macrosTitle(macros.p, macros.f, macros.c)}
         >
-          P {macros.p} · F {macros.f} · C {macros.c} g
+          {t.day.macrosShort(macros.p, macros.f, macros.c)}
         </p>
       )}
       <ul className={`mt-3 flex flex-1 flex-col gap-2 ${regenerating ? 'opacity-40' : ''}`}>
-        {MEAL_ROWS.map(({ slot, label, accent }) => {
+        {MEAL_ROWS.map(({ slot, accent }) => {
           const meal = day.meals[slot];
-          const weight = formatWeight(mealWeight(meal));
+          const weight = formatWeight(mealWeight(meal), t.units);
           const isEaten = eaten?.includes(slot) ?? false;
           return (
             <li key={slot}>
@@ -106,14 +108,14 @@ export function DayCard({
                 className={`w-full rounded-[9px] px-2 py-1.5 text-left hover:brightness-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
                   isEaten ? 'bg-mint' : 'bg-cream'
                 }`}
-                aria-label={`${meal.name} — view ingredients`}
+                aria-label={t.day.viewIngredients(meal.name)}
               >
                 <p
                   className={`flex items-center justify-between gap-1 text-[9px] font-bold tracking-wide ${accent}`}
                 >
-                  <span>{label}</span>
+                  <span>{t.mealLabels[slot]}</span>
                   {isEaten && (
-                    <span className="text-lime-deep" title="Eaten" aria-label="Eaten">
+                    <span className="text-lime-deep" title={t.day.eaten} aria-label={t.day.eaten}>
                       ✓
                     </span>
                   )}
@@ -137,7 +139,7 @@ export function DayCard({
         {openMeal && openRow && (
           <>
             <p className={`text-[10px] font-bold tracking-wide ${openRow.accent}`}>
-              {openRow.label} · {day.day.toUpperCase()}
+              {t.mealLabels[openRow.slot]} · {dayText.label.toUpperCase()}
             </p>
             <h2
               id="meal-ingredients-title"
@@ -146,14 +148,14 @@ export function DayCard({
               {openMeal.name}
             </h2>
             <p className="mt-0.5 font-mono text-xs font-bold text-sand">
-              {openMeal.kcal} kcal
-              {formatWeight(mealWeight(openMeal)) && (
-                <span className="text-sand/70"> · {formatWeight(mealWeight(openMeal))}</span>
+              {openMeal.kcal} {t.units.kcal}
+              {formatWeight(mealWeight(openMeal), t.units) && (
+                <span className="text-sand/70"> · {formatWeight(mealWeight(openMeal), t.units)}</span>
               )}
             </p>
-            {mealMacros(openMeal) && (
+            {openMacros && (
               <p className="mt-0.5 font-mono text-xs font-bold text-latte">
-                protein {openMeal.protein_g} g · fat {openMeal.fat_g} g · carbs {openMeal.carbs_g} g
+                {t.day.macrosTitle(openMacros.p, openMacros.f, openMacros.c)}
               </p>
             )}
             {openMeal.ingredients.length > 0 ? (
@@ -164,16 +166,16 @@ export function DayCard({
                     className="flex items-baseline justify-between gap-3 rounded-[9px] bg-cream px-3 py-2 text-sm font-semibold"
                   >
                     <span>{ing.name}</span>
-                    {formatWeight(ing.grams) && (
+                    {formatWeight(ing.grams, t.units) && (
                       <span className="whitespace-nowrap font-mono text-xs font-bold text-latte">
-                        {formatWeight(ing.grams)}
+                        {formatWeight(ing.grams, t.units)}
                       </span>
                     )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-4 text-sm text-latte">No ingredient details for this meal.</p>
+              <p className="mt-4 text-sm text-latte">{t.day.noIngredients}</p>
             )}
           </>
         )}
@@ -185,25 +187,22 @@ export function DayCard({
         labelledBy="regen-day-title"
       >
         <h2 id="regen-day-title" className="font-display text-xl font-extrabold">
-          Regenerate {day.day} 🎲
+          {t.day.regenTitle(dayText.acc)}
         </h2>
-        <p className="mt-1 text-sm font-semibold text-latte">
-          All three meals for this day will be replaced. Tell the AI what
-          you’re in the mood for, or leave empty for a surprise.
-        </p>
+        <p className="mt-1 text-sm font-semibold text-latte">{t.day.regenText}</p>
         <textarea
           value={preference}
           onChange={(e) => setPreference(e.target.value)}
-          placeholder="e.g. something with fish, lighter dinner, no soup"
+          placeholder={t.day.regenPlaceholder}
           rows={3}
           maxLength={300}
           autoFocus
           className="mt-4 w-full rounded-xl border-2 border-peach-line bg-white px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none"
-          aria-label={`Your wishes for ${day.day}`}
+          aria-label={t.day.regenAria(dayText.acc)}
         />
         <div className="mt-6 flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setRegenOpen(false)}>
-            Cancel
+            {t.common.cancel}
           </Button>
           <Button
             onClick={() => {
@@ -212,7 +211,7 @@ export function DayCard({
               onRegenerate?.(preference);
             }}
           >
-            Regenerate 🎲
+            {t.day.regenButton}
           </Button>
         </div>
       </Modal>

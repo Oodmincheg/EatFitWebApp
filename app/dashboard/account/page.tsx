@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { calorieTarget } from '@/lib/calories';
 import type { Goal, Profile, ProfileInput, Session } from '@/lib/schemas';
@@ -26,6 +27,7 @@ export default function AccountPage() {
 
 function AccountForm({ user, profile }: { user: Session; profile: Profile }) {
   const toast = useToast();
+  const { t } = useI18n();
   const { saveProfile } = useSession();
   const [goal, setGoal] = useState<Goal>(profile.goal);
   const [params, setParams] = useState<ParamsState>({
@@ -62,11 +64,9 @@ function AccountForm({ user, profile }: { user: Session; profile: Profile }) {
     setSaving(true);
     try {
       const updated = await saveProfile(toInput());
-      toast(
-        `Settings saved — daily target ${updated.calorieTarget.toLocaleString('en-US')} kcal`
-      );
+      toast(t.account.saved(updated.calorieTarget.toLocaleString(t.intl)));
     } catch {
-      toast('Could not save your settings. Try again.');
+      toast(t.account.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -75,11 +75,11 @@ function AccountForm({ user, profile }: { user: Session; profile: Profile }) {
   return (
     <>
       <div>
-        <h1 className="font-display text-2xl font-extrabold">My account</h1>
+        <h1 className="font-display text-2xl font-extrabold">{t.account.title}</h1>
         <p className="mt-0.5 text-sm font-semibold text-latte">
           {user.kind === 'google'
-            ? `Signed in with Google as ${user.displayName || user.email}`
-            : 'Guest account — sign in with Google to keep your data across devices.'}
+            ? t.account.google(user.displayName || user.email)
+            : t.account.guest}
         </p>
       </div>
 
@@ -97,25 +97,21 @@ function AccountForm({ user, profile }: { user: Session; profile: Profile }) {
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border-2 border-ink bg-white p-4 sm:p-5">
         <div>
-          <p className="text-[11px] font-bold tracking-widest text-latte">DAILY TARGET</p>
+          <p className="text-[11px] font-bold tracking-widest text-latte">{t.account.target}</p>
           <p className="font-display text-2xl font-extrabold">
             {previewTarget !== null ? (
               <>
-                {previewTarget.toLocaleString('en-US')}{' '}
-                <span className="text-sm text-latte">kcal</span>
+                {previewTarget.toLocaleString(t.intl)}{' '}
+                <span className="text-sm text-latte">{t.units.kcal}</span>
               </>
             ) : (
-              <span className="text-sm font-semibold text-tomato-deep">
-                Fix the fields above to see your target
-              </span>
+              <span className="text-sm font-semibold text-tomato-deep">{t.account.fixFields}</span>
             )}
           </p>
-          <p className="mt-0.5 text-xs font-semibold text-latte">
-            Changes apply the next time you generate a weekly plan.
-          </p>
+          <p className="mt-0.5 text-xs font-semibold text-latte">{t.account.applyNote}</p>
         </div>
         <Button className="px-6 py-3" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving ? t.account.saving : t.account.save}
         </Button>
       </div>
     </>

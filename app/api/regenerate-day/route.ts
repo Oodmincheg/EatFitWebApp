@@ -3,6 +3,7 @@ import { getUid, readJsonBody } from '@/lib/session';
 import { findUser, latestPlan, replaceLatestPlan } from '@/lib/db/queries';
 import { GenerationFailedError, UpstreamError, regenerateMealPlanDay } from '@/lib/llm';
 import { addDays, dateKey, parseDateKey, planStart } from '@/lib/dates';
+import { getLocale } from '@/lib/i18n/server';
 import { RegenerateDayBodySchema } from '@/lib/schemas';
 
 export const runtime = 'nodejs';
@@ -67,7 +68,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const updated = await regenerateMealPlanDay(profile, plan, dayIndex, preference?.trim() || undefined);
+    const updated = await regenerateMealPlanDay(
+      profile,
+      plan,
+      dayIndex,
+      await getLocale(),
+      preference?.trim() || undefined
+    );
     await replaceLatestPlan(uid, updated);
     return NextResponse.json(updated);
   } catch (err) {

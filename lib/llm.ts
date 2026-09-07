@@ -9,6 +9,7 @@ import {
   type Profile,
 } from './schemas';
 import { parseDateKey, weekdayName } from './dates';
+import type { Locale } from './i18n';
 
 export class UpstreamError extends Error {}
 export class GenerationFailedError extends Error {}
@@ -21,15 +22,31 @@ const TAG_LABELS: Record<string, string> = {
   nut_allergy: 'no nuts (nut allergy)',
 };
 
+// Menus are written in the UI language; JSON keys and "day" values stay
+// English because the schema depends on them.
+const LANGUAGE_RULE: Record<Locale, string> = {
+  uk:
+    'Write every meal name and ingredient name in Ukrainian (ingredient names lowercase, ' +
+    'nominative singular, e.g. "куряче філе", "гречка"; reuse the user\'s own wording for ' +
+    'ingredients they listed). Keep JSON keys and the "day" values in English exactly as in the schema. ',
+  en: 'Write every meal name and ingredient name in English (ingredient names lowercase). ',
+};
+
+const FRIDGE_LANGUAGE_RULE: Record<Locale, string> = {
+  uk: 'Use short lowercase Ukrainian names ("куряче філе", "яйця", "помідори")',
+  en: 'Use short lowercase names ("chicken breast", "eggs", "tomatoes")',
+};
+
 const SYSTEM_PROMPT =
   'You are a nutritionist. Respond with JSON only — no markdown, no commentary.';
 
-function userPrompt(profile: Profile, startDay: DayName): string {
+function userPrompt(profile: Profile, startDay: DayName, locale: Locale): string {
   const ingredients = profile.ingredients.trim() || 'none provided';
   const tags = profile.dietaryTags.length
     ? profile.dietaryTags.map((t) => TAG_LABELS[t] ?? t).join(', ')
     : 'none';
   return (
+    LANGUAGE_RULE[locale] +
     `Create a 7-day meal plan starting on ${startDay} (7 consecutive days: ` +
     `${startDay} through ${DAY_NAMES[(DAY_NAMES.indexOf(startDay) + 6) % 7]}), ` +
     `3 meals per day (breakfast, lunch, dinner), ` +
@@ -196,7 +213,7 @@ const FridgeItemsSchema = z.object({
 
 // Extract the food items visible in a fridge/pantry photo. `imageDataUrl`
 // is a base64 data URL (the client downscales before uploading).
-export async function parseFridgeImage(imageDataUrl: string): Promise<string[]> {
+export async function parseFridgeImage(imageDataUrl: string, locale: Locale): Promise<string[]> {
   const raw = await chatCompletion([
     {
       role: 'system',
@@ -210,7 +227,7 @@ export async function parseFridgeImage(imageDataUrl: string): Promise<string[]> 
           type: 'text',
           text:
             'List the food items and ingredients visible in this photo of a fridge or pantry. ' +
-            'Use short lowercase names ("chicken breast", "eggs", "tomatoes") — no quantities, ' +
+            `${FRIDGE_LANGUAGE_RULE[locale]} — no quantities, ` +
             'no brands, no duplicates. Skip non-food objects. If nothing edible is visible, ' +
             'return an empty list. Return JSON matching exactly: {"items":["",""]}',
         },
@@ -231,10 +248,17 @@ export async function parseFridgeImage(imageDataUrl: string): Promise<string[]> 
 }
 
 // `startDate` is the local date key ("YYYY-MM-DD") of the plan's first day.
-export async function generateMealPlan(profile: Profile, startDate: string): Promise<MealPlan> {
+export async function generateMealPlan(
+  profile: Profile,
+  startDate: string,
+  locale: Locale
+): Promise<MealPlan> {
   const plan = await completeJson(ModelPlanSchema, [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: userPrompt(profile, weekdayName(parseDateKey(startDate))) },
+    {
+      role: 'user',
+      content: userPrompt(profile, weekdayName(parseDateKey(startDate)), locale),
+    },
   ]);
   return normalizePlan(plan, startDate);
 }
@@ -243,6 +267,7 @@ function dayPrompt(
   profile: Profile,
   plan: MealPlan,
   dayIndex: number,
+  locale: Locale,
   preference?: string
 ): string {
   const ingredients = profile.ingredients.trim() || 'none provided';
@@ -253,6 +278,7 @@ function dayPrompt(
     .filter((_, i) => i !== dayIndex)
     .flatMap((d) => [d.meals.breakfast.name, d.meals.lunch.name, d.meals.dinner.name]);
   return (
+    LANGUAGE_RULE[locale] +
     `Create a fresh one-day meal plan for ${plan.days[dayIndex].day} to replace the current one, ` +
     `3 meals (breakfast, lunch, dinner), targeting ${profile.calorieTarget} kcal total (within ±10%). ` +
     (preference
@@ -279,11 +305,12 @@ export async function regenerateMealPlanDay(
   profile: Profile,
   plan: MealPlan,
   dayIndex: number,
+  locale: Locale,
   preference?: string
 ): Promise<MealPlan> {
   const result = await completeJson(ModelDaySchema, [
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: dayPrompt(profile, plan, dayIndex, preference) },
+    { role: 'user', content: dayPrompt(profile, plan, dayIndex, locale, preference) },
   ]);
   const meals = {
     breakfast: normalizeMeal(result.meals.breakfast),

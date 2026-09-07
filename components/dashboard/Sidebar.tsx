@@ -2,27 +2,30 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useI18n } from '@/hooks/useI18n';
+import type { Dict } from '@/lib/i18n';
 
-const NAV_ITEMS = [
-  { href: '/dashboard', icon: '🍽️', label: 'Today' },
-  { href: '/dashboard/plan', icon: '📅', label: 'Week plan' },
-  { href: '/dashboard/ingredients', icon: '🥕', label: 'Ingredients' },
-  { href: '/dashboard/cart', icon: '🛒', label: 'Cart' },
-  { href: '/dashboard/history', icon: '🗂️', label: 'History' },
-  { href: '/dashboard/account', icon: '👤', label: 'My account' },
-] as const;
+const NAV_ITEMS: { href: string; icon: string; key: keyof Dict['shell']['nav'] }[] = [
+  { href: '/dashboard', icon: '🍽️', key: 'today' },
+  { href: '/dashboard/plan', icon: '📅', key: 'plan' },
+  { href: '/dashboard/ingredients', icon: '🥕', key: 'ingredients' },
+  { href: '/dashboard/cart', icon: '🛒', key: 'cart' },
+  { href: '/dashboard/history', icon: '🗂️', key: 'history' },
+  { href: '/dashboard/account', icon: '👤', key: 'account' },
+];
 
 // Vertical nav on ≥sm screens; a fixed bottom tab bar on phones.
 export function Sidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     <nav
-      aria-label="Dashboard"
+      aria-label={t.shell.navLabel}
       className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-peach-line bg-cream sm:static sm:z-auto sm:w-48 sm:shrink-0 sm:border-t-0 sm:bg-transparent"
     >
       <ul className="flex justify-around gap-1 px-2 py-1.5 sm:flex-col sm:justify-start sm:px-0 sm:py-0">
-        {NAV_ITEMS.map(({ href, icon, label }) => {
+        {NAV_ITEMS.map(({ href, icon, key }) => {
           const active = pathname === href;
           return (
             <li key={href} className="sm:w-full">
@@ -38,7 +41,7 @@ export function Sidebar() {
                 <span aria-hidden="true" className="text-base sm:text-lg">
                   {icon}
                 </span>
-                {label}
+                {t.shell.nav[key]}
               </Link>
             </li>
           );

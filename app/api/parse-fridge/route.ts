@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { BodyError, getUid, readJsonBody } from '@/lib/session';
 import { GenerationFailedError, UpstreamError, parseFridgeImage } from '@/lib/llm';
+import { getLocale } from '@/lib/i18n/server';
 import { ParseFridgeBodySchema } from '@/lib/schemas';
 
 export const runtime = 'nodejs';
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const items = await parseFridgeImage(parsed.data.image);
+    const items = await parseFridgeImage(parsed.data.image, await getLocale());
     return NextResponse.json({ items });
   } catch (err) {
     console.log(err);

@@ -7,38 +7,33 @@ import { SummaryCard } from '@/components/dashboard/SummaryCard';
 import { WeekSkeleton, WeekView } from '@/components/dashboard/WeekView';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { usePlan } from '@/hooks/usePlan';
 import { useProgress } from '@/hooks/useProgress';
 import { eatenByDayName, planRange } from '@/lib/dates';
 import type { DietaryTag } from '@/lib/schemas';
 
-const STATUS_LINES = [
-  'Composing your week…',
-  'Balancing calories across days…',
-  'Checking your fridge…',
-  'Filling the gaps with groceries…',
-  'Plating it all up…',
-];
-
 export default function PlanPage() {
+  const { t } = useI18n();
   const { profile, saveProfile } = useSession();
   const { plan, generating, regeneratingDay, error, generate, regenerateDay } = usePlan();
   const { byDate } = useProgress(plan ? planRange(plan) : undefined);
   const toast = useToast();
   const [statusIdx, setStatusIdx] = useState(0);
   const [fridgeOpen, setFridgeOpen] = useState(false);
+  const statusLines = t.plan.status;
 
   // Rotating status line while the model works (5–30 s expected).
   useEffect(() => {
     if (!generating) return;
     setStatusIdx(0);
     const timer = setInterval(
-      () => setStatusIdx((i) => (i + 1) % STATUS_LINES.length),
+      () => setStatusIdx((i) => (i + 1) % statusLines.length),
       3000
     );
     return () => clearInterval(timer);
-  }, [generating]);
+  }, [generating, statusLines.length]);
 
   if (!profile) return null;
 
@@ -54,7 +49,7 @@ export default function PlanPage() {
     setFridgeOpen(false);
     const tagsChanged =
       dietaryTags.length !== profile.dietaryTags.length ||
-      dietaryTags.some((t) => !profile.dietaryTags.includes(t));
+      dietaryTags.some((tag) => !profile.dietaryTags.includes(tag));
     if (ingredients !== profile.ingredients || tagsChanged) {
       try {
         await saveProfile({
@@ -68,7 +63,7 @@ export default function PlanPage() {
           dietaryTags,
         });
       } catch {
-        toast('Could not save your fridge list. Try again.');
+        toast(t.plan.saveFridgeFailed);
         return;
       }
     }
@@ -85,11 +80,11 @@ export default function PlanPage() {
             onClick={() => setFridgeOpen(true)}
             disabled={generating || regeneratingDay !== null}
           >
-            {generating ? 'Cooking…' : plan ? 'Regenerate 🎲' : 'Generate my week 🎲'}
+            {generating ? t.plan.cooking : plan ? t.plan.regenerate : t.plan.generate}
           </Button>
           {generating && (
             <span className="font-mono text-xs font-bold text-sand" role="status">
-              {STATUS_LINES[statusIdx]}
+              {statusLines[statusIdx]}
             </span>
           )}
         </div>
@@ -102,11 +97,10 @@ export default function PlanPage() {
         >
           <span>
             <span aria-hidden="true">⚙️ </span>
-            Your settings changed after this plan was made, so it may no longer
-            match your goal. Regenerate to bring it up to date.
+            {t.plan.outdated}
           </span>
           <Button variant="secondary" onClick={() => setFridgeOpen(true)}>
-            Regenerate
+            {t.plan.outdatedButton}
           </Button>
         </div>
       )}
@@ -116,13 +110,9 @@ export default function PlanPage() {
           role="alert"
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-ink bg-apricot px-4 py-3 text-sm font-semibold"
         >
-          <span>
-            {error === 'generation_failed'
-              ? 'The AI produced an invalid plan. Your previous plan is untouched.'
-              : 'Could not reach the meal-planning service.'}
-          </span>
+          <span>{error === 'generation_failed' ? t.plan.invalid : t.plan.upstream}</span>
           <Button variant="secondary" onClick={generate}>
-            Try again
+            {t.common.tryAgain}
           </Button>
         </div>
       )}
@@ -139,12 +129,12 @@ export default function PlanPage() {
             onRegenerateDay={regenerateDay}
           />
           <p className="text-sm font-semibold text-latte">
-            Need groceries for this menu?{' '}
+            {t.plan.needGroceries}{' '}
             <Link
               href="/dashboard/ingredients"
               className="font-bold text-tomato underline-offset-2 hover:underline"
             >
-              Build your cart →
+              {t.plan.buildCart}
             </Link>
           </p>
         </>
@@ -153,10 +143,8 @@ export default function PlanPage() {
           <p className="text-3xl" aria-hidden="true">
             🍽️
           </p>
-          <p className="mt-3 font-display text-lg font-extrabold">No plan yet</p>
-          <p className="mt-1 text-sm text-latte">
-            Generate your first weekly menu to see it here.
-          </p>
+          <p className="mt-3 font-display text-lg font-extrabold">{t.plan.noPlan}</p>
+          <p className="mt-1 text-sm text-latte">{t.plan.noPlanText}</p>
         </div>
       )}
 

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useI18n } from '@/hooks/useI18n';
 import { CART_TICKS_PREFIX } from '@/lib/clientStorage';
-import { CATEGORY_LABELS, CATEGORY_ORDER, formatWeight, shoppingList } from '@/lib/shopping';
+import { CATEGORY_ORDER, formatWeight, shoppingList } from '@/lib/shopping';
 import type { MealPlan, OrderItem } from '@/lib/schemas';
 
 export function ShoppingList({
@@ -14,6 +15,7 @@ export function ShoppingList({
   ownedRaw: string;
   onOrder: (items: OrderItem[]) => void;
 }) {
+  const { t } = useI18n();
   const items = useMemo(() => shoppingList(plan, ownedRaw), [plan, ownedRaw]);
   // Ticks are keyed by the plan's generatedAt: they survive navigation but
   // start fresh with each new plan — the list is derived from it anyway.
@@ -59,16 +61,14 @@ export function ShoppingList({
   return (
     <section className="rounded-[20px] border-2 border-ink bg-tomato p-5 text-white sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-[11px] font-bold tracking-widest">
-          🛒 SHOPPING LIST · {toBuy.length} {toBuy.length === 1 ? 'ITEM' : 'ITEMS'} TO BUY
-        </h2>
+        <h2 className="text-[11px] font-bold tracking-widest">{t.shopping.title(toBuy.length)}</h2>
         <div className="flex items-center gap-3">
           {checked.size > 0 && (
             <button
               onClick={uncheckAll}
               className="text-xs font-bold text-white/80 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Uncheck all ({checked.size})
+              {t.shopping.uncheckAll(checked.size)}
             </button>
           )}
           {toBuy.length > 0 && (
@@ -76,22 +76,20 @@ export function ShoppingList({
               onClick={() => onOrder(toBuy.map(({ name, grams }) => ({ name, grams })))}
               className="rounded-full bg-white px-5 py-3 text-[14.5px] font-bold whitespace-nowrap text-tomato transition-colors hover:bg-peach focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              Build my Silpo cart 🛒
+              {t.shopping.build}
             </button>
           )}
         </div>
       </div>
       {items.length === 0 ? (
-        <p className="mt-3 font-semibold">You already have everything you need 🎉</p>
+        <p className="mt-3 font-semibold">{t.shopping.haveEverything}</p>
       ) : (
         <>
-          {toBuy.length === 0 && (
-            <p className="mt-3 font-semibold">Everything&rsquo;s ticked off 🎉</p>
-          )}
+          {toBuy.length === 0 && <p className="mt-3 font-semibold">{t.shopping.allTicked}</p>}
           {groups.map(({ category, items: groupItems }) => (
             <div key={category}>
               <h3 className="mt-5 text-[11px] font-bold tracking-widest text-white/70 uppercase">
-                {CATEGORY_LABELS[category]}
+                {t.categories[category]}
               </h3>
               <ul className="mt-1 flex flex-col divide-y divide-white/15">
                 {groupItems.map((item) => {
@@ -123,7 +121,7 @@ export function ShoppingList({
                           <span className="text-sm font-semibold capitalize">{item.name}</span>
                           {item.grams > 0 && (
                             <span className="ml-2 font-mono text-xs font-bold text-white/80">
-                              {formatWeight(item.grams)}
+                              {formatWeight(item.grams, t.units)}
                             </span>
                           )}
                           <span className="block truncate text-xs text-white/65">

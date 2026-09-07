@@ -5,14 +5,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Button } from '@/components/ui/Button';
+import { LanguageToggle } from '@/components/ui/LanguageToggle';
 import { Logo } from '@/components/ui/Logo';
 import { useToast } from '@/components/ui/Toast';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { firebaseAvailable, signInWithGoogle } from '@/lib/firebase';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useI18n();
   const { loading, user, profile, startGoogle, logout } = useSession();
   const [authBusy, setAuthBusy] = useState(false);
 
@@ -23,11 +26,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       const session = await startGoogle(idToken);
       toast(
         session.kind === 'google'
-          ? `Signed in as ${session.displayName || session.email}`
-          : 'Signed in with Google'
+          ? t.shell.signedInAs(session.displayName || session.email)
+          : t.shell.signedInGoogle
       );
     } catch {
-      toast('Google sign-in was cancelled or blocked.');
+      toast(t.shell.googleFailed);
     } finally {
       setAuthBusy(false);
     }
@@ -46,10 +49,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [loading, user, profile, router]);
 
   if (loading || !user || !profile) {
-    return <main className="p-8 text-center text-sm font-medium text-sand">Loading…</main>;
+    return <main className="p-8 text-center text-sm font-medium text-sand">{t.common.loading}</main>;
   }
 
-  const displayName = user.kind === 'google' ? user.displayName || user.email : 'guest';
+  const displayName = user.kind === 'google' ? user.displayName || user.email : t.shell.guest;
   const initial = (displayName || 'g').trim().charAt(0).toUpperCase();
 
   return (
@@ -64,15 +67,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           </Link>
           <div className="flex items-center gap-3">
             <span className="hidden text-[13.5px] font-semibold text-latte sm:inline">
-              Hey, {displayName} 👋
+              {t.shell.hello(displayName)}
             </span>
+            <LanguageToggle />
             {user.kind === 'guest' && firebaseAvailable && (
               <Button variant="secondary" onClick={handleGoogle} disabled={authBusy}>
-                Sign in with Google
+                {t.shell.signInGoogle}
               </Button>
             )}
             <Button variant="ghost" onClick={handleLogout}>
-              Log out
+              {t.shell.logout}
             </Button>
             <span
               aria-hidden="true"

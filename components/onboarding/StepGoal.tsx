@@ -1,11 +1,12 @@
 'use client';
 
+import { useI18n } from '@/hooks/useI18n';
 import type { Goal } from '@/lib/schemas';
 
-const GOALS: { value: Goal; icon: string; title: string; text: string }[] = [
-  { value: 'weight_loss', icon: '📉', title: 'Weight loss', text: 'Eat at a moderate calorie deficit' },
-  { value: 'maintenance', icon: '⚖️', title: 'Maintenance', text: 'Keep your current weight' },
-  { value: 'muscle_gain', icon: '💪', title: 'Muscle gain', text: 'Eat at a calorie surplus' },
+const GOALS: { value: Goal; icon: string }[] = [
+  { value: 'weight_loss', icon: '📉' },
+  { value: 'maintenance', icon: '⚖️' },
+  { value: 'muscle_gain', icon: '💪' },
 ];
 
 export function StepGoal({
@@ -15,9 +16,10 @@ export function StepGoal({
   value: Goal | null;
   onChange: (goal: Goal) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div>
-      <h2 className="font-display text-2xl font-extrabold">What’s your goal?</h2>
+      <h2 className="font-display text-2xl font-extrabold">{t.onboarding.goalTitle}</h2>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {GOALS.map((g) => (
           <button
@@ -34,8 +36,8 @@ export function StepGoal({
             <span className="text-2xl" aria-hidden="true">
               {g.icon}
             </span>
-            <span className="mt-2 block font-bold">{g.title}</span>
-            <span className="mt-1 block text-sm text-latte">{g.text}</span>
+            <span className="mt-2 block font-bold">{t.goals[g.value]}</span>
+            <span className="mt-1 block text-sm text-latte">{t.goalHints[g.value]}</span>
           </button>
         ))}
       </div>

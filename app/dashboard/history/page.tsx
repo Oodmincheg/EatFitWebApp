@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { WeekView } from '@/components/dashboard/WeekView';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { eatenByDayName, formatDateTime, planRange } from '@/lib/dates';
 import type { DayProgress, MealPlan, MealSlot } from '@/lib/schemas';
 
 export default function HistoryPage() {
+  const { t } = useI18n();
   const { profile } = useSession();
   const [plans, setPlans] = useState<MealPlan[] | null>(null);
   const [eatenByDate, setEatenByDate] = useState<Record<string, MealSlot[]>>({});
@@ -49,10 +51,8 @@ export default function HistoryPage() {
   return (
     <>
       <div>
-        <h1 className="font-display text-2xl font-extrabold">History</h1>
-        <p className="mt-0.5 text-sm font-semibold text-latte">
-          Every weekly menu you have generated, newest first.
-        </p>
+        <h1 className="font-display text-2xl font-extrabold">{t.history.title}</h1>
+        <p className="mt-0.5 text-sm font-semibold text-latte">{t.history.subtitle}</p>
       </div>
 
       {plans === null ? (
@@ -66,15 +66,15 @@ export default function HistoryPage() {
           <p className="text-3xl" aria-hidden="true">
             🗂️
           </p>
-          <p className="mt-3 font-display text-lg font-extrabold">No history yet</p>
+          <p className="mt-3 font-display text-lg font-extrabold">{t.history.empty}</p>
           <p className="mt-1 text-sm text-latte">
             <Link
               href="/dashboard/plan"
               className="font-bold text-tomato underline-offset-2 hover:underline"
             >
-              Generate your first weekly menu
-            </Link>{' '}
-            and it will be archived here.
+              {t.history.emptyLink}
+            </Link>
+            {t.history.emptyText}
           </p>
         </div>
       ) : (
@@ -99,24 +99,26 @@ export default function HistoryPage() {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
                       <span className="font-display text-[15px] font-extrabold">
-                        Week of {formatDateTime(plan.generatedAt)}
+                        {t.history.weekOf(formatDateTime(plan.generatedAt, t.intl))}
                       </span>
                       {idx === 0 && (
                         <span className="rounded-full bg-mint px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-lime-deep">
-                          CURRENT
+                          {t.history.current}
                         </span>
                       )}
                     </span>
                     <span className="mt-0.5 block text-xs font-semibold text-latte">
-                      avg {avgKcal.toLocaleString('en-US')} kcal/day · target{' '}
-                      {profile.calorieTarget.toLocaleString('en-US')} ·{' '}
+                      {t.history.avg(
+                        avgKcal.toLocaleString(t.intl),
+                        profile.calorieTarget.toLocaleString(t.intl)
+                      )}
                       <span className={eatenCount > 0 ? 'text-lime-deep' : undefined}>
-                        {eatenCount}/21 meals eaten
+                        {t.history.eaten(eatenCount)}
                       </span>
                     </span>
                   </span>
                   <span aria-hidden="true" className="text-sm font-bold text-latte">
-                    {expanded ? '▴ Hide' : '▾ View menu'}
+                    {expanded ? t.history.hide : t.history.view}
                   </span>
                 </button>
                 {expanded && (

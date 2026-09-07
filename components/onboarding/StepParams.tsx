@@ -1,5 +1,7 @@
 'use client';
 
+import { useI18n } from '@/hooks/useI18n';
+import type { Dict } from '@/lib/i18n';
 import type { ActivityLevel, Sex } from '@/lib/schemas';
 
 export interface ParamsState {
@@ -10,39 +12,38 @@ export interface ParamsState {
   activityLevel: ActivityLevel | '';
 }
 
+// Error codes, rendered through t.onboarding.errors.
+type ErrorCode = keyof Dict['onboarding']['errors'];
+
 export interface ParamsErrors {
-  age?: string;
-  weightKg?: string;
-  heightCm?: string;
-  sex?: string;
-  activityLevel?: string;
+  age?: ErrorCode;
+  weightKg?: ErrorCode;
+  heightCm?: ErrorCode;
+  sex?: ErrorCode;
+  activityLevel?: ErrorCode;
 }
 
 export function validateParams(p: ParamsState): ParamsErrors {
   const errors: ParamsErrors = {};
   const age = Number(p.age);
   if (!p.age || !Number.isInteger(age) || age < 10 || age > 100) {
-    errors.age = 'Whole number between 10 and 100';
+    errors.age = 'age';
   }
   const weight = Number(p.weightKg);
   if (!p.weightKg || Number.isNaN(weight) || weight < 30 || weight > 300) {
-    errors.weightKg = 'Between 30 and 300 kg';
+    errors.weightKg = 'weight';
   }
   const height = Number(p.heightCm);
   if (!p.heightCm || Number.isNaN(height) || height < 100 || height > 250) {
-    errors.heightCm = 'Between 100 and 250 cm';
+    errors.heightCm = 'height';
   }
-  if (!p.sex) errors.sex = 'Required';
-  if (!p.activityLevel) errors.activityLevel = 'Required';
+  if (!p.sex) errors.sex = 'required';
+  if (!p.activityLevel) errors.activityLevel = 'required';
   return errors;
 }
 
-const ACTIVITY_OPTIONS: { value: ActivityLevel; label: string }[] = [
-  { value: 'sedentary', label: 'Sedentary (little exercise)' },
-  { value: 'light', label: 'Light (1–3 workouts/week)' },
-  { value: 'moderate', label: 'Moderate (3–5 workouts/week)' },
-  { value: 'active', label: 'Active (6–7 workouts/week)' },
-];
+const ACTIVITY_LEVELS: ActivityLevel[] = ['sedentary', 'light', 'moderate', 'active'];
+const SEXES: Sex[] = ['male', 'female'];
 
 const inputCls =
   'mt-1.5 w-full rounded-xl border-2 border-peach-line bg-white px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none';
@@ -56,11 +57,13 @@ export function StepParams({
   errors: ParamsErrors;
   onChange: (patch: Partial<ParamsState>) => void;
 }) {
+  const { t } = useI18n();
+  const msg = (code?: ErrorCode) => (code ? t.onboarding.errors[code] : undefined);
   return (
     <div>
-      <h2 className="font-display text-2xl font-extrabold">Tell us about yourself</h2>
+      <h2 className="font-display text-2xl font-extrabold">{t.onboarding.paramsTitle}</h2>
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        <Field label="Age" error={errors.age}>
+        <Field label={t.onboarding.fields.age} error={msg(errors.age)}>
           <input
             type="number"
             inputMode="numeric"
@@ -70,7 +73,7 @@ export function StepParams({
             aria-invalid={Boolean(errors.age)}
           />
         </Field>
-        <Field label="Weight (kg)" error={errors.weightKg}>
+        <Field label={t.onboarding.fields.weight} error={msg(errors.weightKg)}>
           <input
             type="number"
             inputMode="decimal"
@@ -80,7 +83,7 @@ export function StepParams({
             aria-invalid={Boolean(errors.weightKg)}
           />
         </Field>
-        <Field label="Height (cm)" error={errors.heightCm}>
+        <Field label={t.onboarding.fields.height} error={msg(errors.heightCm)}>
           <input
             type="number"
             inputMode="decimal"
@@ -92,26 +95,26 @@ export function StepParams({
         </Field>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Field label="Sex" error={errors.sex}>
+        <Field label={t.onboarding.fields.sex} error={msg(errors.sex)}>
           <div className="mt-1.5 grid grid-cols-2 overflow-hidden rounded-xl border-2 border-ink">
-            {(['male', 'female'] as Sex[]).map((s) => (
+            {SEXES.map((s) => (
               <button
                 key={s}
                 type="button"
                 aria-pressed={value.sex === s}
                 onClick={() => onChange({ sex: s })}
-                className={`px-3 py-2.5 text-sm capitalize transition-colors ${
+                className={`px-3 py-2.5 text-sm transition-colors ${
                   value.sex === s
                     ? 'bg-tomato font-bold text-white'
                     : 'bg-white font-semibold text-latte hover:bg-cream'
                 }`}
               >
-                {s}
+                {t.sex[s]}
               </button>
             ))}
           </div>
         </Field>
-        <Field label="Activity level" error={errors.activityLevel}>
+        <Field label={t.onboarding.fields.activity} error={msg(errors.activityLevel)}>
           <select
             value={value.activityLevel}
             onChange={(e) => onChange({ activityLevel: e.target.value as ActivityLevel })}
@@ -119,11 +122,11 @@ export function StepParams({
             aria-invalid={Boolean(errors.activityLevel)}
           >
             <option value="" disabled>
-              Select…
+              {t.onboarding.select}
             </option>
-            {ACTIVITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {ACTIVITY_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {t.activity[level]}
               </option>
             ))}
           </select>
