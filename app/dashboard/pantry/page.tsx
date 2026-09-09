@@ -1,52 +1,81 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
 import { usePantry } from '@/hooks/usePantry';
 import { useSession } from '@/hooks/useSession';
-import { scanFridgePhoto, mergePantry, parsePantryText } from '@/lib/pantry';
-import type { PantryItem } from '@/lib/schemas';
+import { mergePantry, parsePantryText } from '@/lib/pantry';
+import { PANTRY_UNITS, type PantryItem, type PantryUnit } from '@/lib/schemas';
 
 const MAX_ITEMS = 120;
+const SAVE_DELAY = 800;
 
 export default function PantryPage() {
   const { t } = useI18n();
-  const toast = useToast();
   const { profile } = useSession();
-  const { pantry, saving, save } = usePantry();
+  const { pantry, save } = usePantry();
   const [items, setItems] = useState<PantryItem[]>(pantry);
-  const [dirty, setDirty] = useState(false);
+  // Edits are saved on their own, so "unsaved changes" can never strand the
+  // shopping list on an older pantry.
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const [bulk, setBulk] = useState('');
-  const [scanning, setScanning] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const touched = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // The session is the source of truth; adopt it until the user edits.
+  // Adopt the session's pantry until the user starts editing; after that the
+  // local list is authoritative (a half-typed row must not vanish on save).
   useEffect(() => {
-    if (!dirty) setItems(pantry);
-  }, [pantry, dirty]);
+    if (!touched.current) setItems(pantry);
+  }, [pantry]);
+
+  const flush = useCallback(
+    async (next: PantryItem[]) => {
+      const cleaned = next
+        .map((item) => ({ ...item, name: item.name.trim() }))
+        .filter((item) => item.name);
+      setStatus('saving');
+      try {
+        await save(cleaned);
+        setStatus('saved');
+      } catch {
+        setStatus('failed');
+      }
+    },
+    [save]
+  );
+
+  const update = useCallback(
+    (next: PantryItem[]) => {
+      touched.current = true;
+      const capped = next.slice(0, MAX_ITEMS);
+      setItems(capped);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => flush(capped), SAVE_DELAY);
+    },
+    [flush]
+  );
+
+  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
   if (!profile) return null;
-
-  const update = (next: PantryItem[]) => {
-    setItems(next.slice(0, MAX_ITEMS));
-    setDirty(true);
-  };
 
   const setName = (i: number, name: string) =>
     update(items.map((item, idx) => (idx === i ? { ...item, name } : item)));
 
-  const setGrams = (i: number, raw: string) =>
+  const setAmount = (i: number, raw: string) =>
     update(
       items.map((item, idx) => {
         if (idx !== i) return item;
-        const grams = Number(raw);
-        return raw.trim() === '' || !Number.isFinite(grams) || grams < 0
+        const amount = Number(raw);
+        return raw.trim() === '' || !Number.isFinite(amount) || amount < 0
           ? { name: item.name }
-          : { name: item.name, grams };
+          : { name: item.name, amount, unit: item.unit ?? 'g' };
       })
     );
+
+  const setUnit = (i: number, unit: PantryUnit) =>
+    update(items.map((item, idx) => (idx === i ? { ...item, unit } : item)));
 
   const addRow = () => update([...items, { name: '' }]);
   const removeRow = (i: number) => update(items.filter((_, idx) => idx !== i));
@@ -58,37 +87,6 @@ export default function PantryPage() {
     setBulk('');
   };
 
-  const scan = async (file: Blob) => {
-    if (scanning) return;
-    setScanning(true);
-    try {
-      const names = await scanFridgePhoto(file);
-      if (names.length === 0) {
-        toast(t.fridge.noFood);
-        return;
-      }
-      update(mergePantry(items, names.map((name) => ({ name }))));
-    } catch {
-      toast(t.fridge.readFailed);
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const persist = async () => {
-    const cleaned = items
-      .map((item) => ({ ...item, name: item.name.trim() }))
-      .filter((item) => item.name);
-    try {
-      await save(cleaned);
-      setItems(cleaned);
-      setDirty(false);
-      toast(t.pantry.saved);
-    } catch {
-      toast(t.pantry.saveFailed);
-    }
-  };
-
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -96,45 +94,20 @@ export default function PantryPage() {
           <h1 className="font-display text-2xl font-extrabold">{t.pantry.title}</h1>
           <p className="mt-0.5 max-w-xl text-sm font-semibold text-latte">{t.pantry.subtitle}</p>
         </div>
-        <div className="flex items-center gap-3">
-          {dirty && (
-            <span className="text-xs font-bold text-tomato" role="status">
-              {t.pantry.unsaved}
-            </span>
-          )}
-          <Button onClick={persist} disabled={saving || !dirty}>
-            {saving ? t.pantry.saving : t.pantry.save}
-          </Button>
-        </div>
+        {status !== 'idle' && (
+          <span
+            role="status"
+            className={`text-xs font-bold ${status === 'failed' ? 'text-tomato' : 'text-latte'}`}
+          >
+            {status === 'saving' ? t.pantry.saving : status === 'saved' ? `✓ ${t.pantry.saved}` : t.pantry.saveFailed}
+          </span>
+        )}
       </div>
 
       <section className="rounded-3xl border-2 border-ink bg-paper p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[11px] font-bold tracking-widest text-latte">
-            {t.pantry.countHint(items.length)}
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = '';
-                if (file) scan(file);
-              }}
-            />
-            <Button
-              variant="secondary"
-              className="px-4 py-2 text-xs"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={scanning}
-            >
-              {scanning ? t.pantry.scanning : t.pantry.scan}
-            </Button>
-          </div>
-        </div>
+        <p className="text-[11px] font-bold tracking-widest text-latte">
+          {t.pantry.countHint(items.length)}
+        </p>
 
         {items.length === 0 ? (
           <div className="mt-4 rounded-2xl border-2 border-dashed border-sand py-10 text-center">
@@ -158,14 +131,27 @@ export default function PantryPage() {
                 />
                 <input
                   type="number"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   min={0}
-                  value={item.grams ?? ''}
-                  onChange={(e) => setGrams(i, e.target.value)}
-                  placeholder={t.pantry.gramsPlaceholder}
-                  aria-label={t.pantry.gramsAria(item.name)}
+                  step="any"
+                  value={item.amount ?? ''}
+                  onChange={(e) => setAmount(i, e.target.value)}
+                  placeholder={t.pantry.amountPlaceholder}
+                  aria-label={t.pantry.amountAria(item.name)}
                   className="w-24 rounded-xl border-2 border-peach-line bg-paper px-3 py-2 text-sm font-semibold focus:border-ink focus:outline-none"
                 />
+                <select
+                  value={item.unit ?? 'g'}
+                  onChange={(e) => setUnit(i, e.target.value as PantryUnit)}
+                  aria-label={t.pantry.unitAria(item.name)}
+                  className="w-20 rounded-xl border-2 border-peach-line bg-paper px-2 py-2 text-sm font-semibold focus:border-ink focus:outline-none"
+                >
+                  {PANTRY_UNITS.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {t.pantryUnits[unit]}
+                    </option>
+                  ))}
+                </select>
                 <button
                   onClick={() => removeRow(i)}
                   aria-label={t.pantry.removeAria(item.name)}

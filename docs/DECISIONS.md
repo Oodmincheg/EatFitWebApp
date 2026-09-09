@@ -121,7 +121,21 @@ profile now carries `pantry: {name, grams?}[]` with its own page and its own rou
 the plan outdated). `profile.ingredients` is kept and derived from the pantry on every
 write, because the prompt and the owned-item matching read that one string. Rows without
 a weight behave exactly as the old list did; rows with one are subtracted from the
-shopping list instead of removing the item.
+shopping list instead of removing the item. Amounts carry a unit (g/kg/ml/l/pcs) and are
+converted to grams for that subtraction — millilitres count as grams, which is right for
+water-like staples and close enough for milk or oil — while a count in pieces says nothing
+about weight and so covers the item outright. The page saves as you type: an explicit save
+button left people with a pantry that looked edited while everything else still read the
+old one.
+
+## 2026-09-09 · Regeneration checks its own output
+
+Two failure modes were visible as soon as the flow was used in anger: "replace this meal"
+could hand back the same meal, and a day could land far from the calorie target while the
+UI dutifully showed it. Both are now checked server-side against recomputed totals, with
+one corrective turn each — the meal swap is told the name it returned is the one being
+replaced, the day is told its total and the target — and the closer attempt wins. One
+retry only: a second call per miss is affordable, a loop is not.
 
 ## 2026-09-09 · Theme through CSS variables, not a Tailwind dark: variant
 

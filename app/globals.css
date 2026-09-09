@@ -150,20 +150,3 @@ html {
   .squiggle-draw { animation: none; stroke-dashoffset: 0; }
   [data-reveal] { opacity: 1; translate: 0 0; transition: none; }
 }
-
-/* ---------- printing the shopping list ----------
-   Only the list survives; it prints as plain text on white. */
-@media print {
-  body { background: #fff; }
-  body :not(.shopping-print):not(.shopping-print *) { display: none !important; }
-  .shopping-print {
-    position: absolute;
-    inset: 0;
-    background: #fff !important;
-    color: #000 !important;
-    border: 0 !important;
-    padding: 0 !important;
-  }
-  .shopping-print * { color: #000 !important; }
-  .no-print { display: none !important; }
-}

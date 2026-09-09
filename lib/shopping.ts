@@ -1,4 +1,11 @@
-import { daySlots, type MealPlan, type PantryItem, type ShoppingCategory, type ShoppingItem } from './schemas';
+import {
+  daySlots,
+  pantryGrams,
+  type MealPlan,
+  type PantryItem,
+  type ShoppingCategory,
+  type ShoppingItem,
+} from './schemas';
 
 // Naive by design (spec §5.4.1) — good enough for the demo; no NLP.
 // Ingredient names arrive in the plan's language (English or Ukrainian), and
@@ -171,9 +178,11 @@ export function shoppingList(plan: MealPlan, pantry: PantryItem[]): ShoppingItem
       out.push({ name, grams, usedIn: [...usedIn], category: categorize(name) });
       continue;
     }
-    // Any weightless match covers the item entirely; so does an unknown need.
-    if (matches.some((row) => row.grams === undefined) || grams <= 0) continue;
-    const have = matches.reduce((sum, row) => sum + (row.grams ?? 0), 0);
+    // Any weightless match (no amount, or a count in pieces) covers the item
+    // entirely; so does an unknown need.
+    const weights = matches.map(pantryGrams);
+    if (weights.some((w) => w === null) || grams <= 0) continue;
+    const have = weights.reduce((sum: number, w) => sum + (w ?? 0), 0);
     if (have >= grams) continue;
     out.push({
       name,

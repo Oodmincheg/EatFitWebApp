@@ -17,13 +17,38 @@ export type Sex = z.infer<typeof SexSchema>;
 export type ActivityLevel = z.infer<typeof ActivityLevelSchema>;
 export type DietaryTag = z.infer<typeof DietaryTagSchema>;
 
-// One line of the pantry. `grams` is optional: an item without a weight is
-// treated as "enough of it", the way the old free-text list behaved.
+// How a pantry amount is entered. Everything but pieces converts to grams
+// for the shopping-list subtraction; millilitres are counted as grams, which
+// is right for water-like staples and close enough for milk or oil.
+export const PANTRY_UNITS = ['g', 'kg', 'ml', 'l', 'pc'] as const;
+export const PantryUnitSchema = z.enum(PANTRY_UNITS);
+export type PantryUnit = z.infer<typeof PantryUnitSchema>;
+
+const UNIT_GRAMS: Record<PantryUnit, number | null> = {
+  g: 1,
+  kg: 1000,
+  ml: 1,
+  l: 1000,
+  pc: null, // a count says nothing about weight
+};
+
+// One line of the pantry. An item with no amount — or one counted in pieces —
+// is treated as "enough of it", the way the old free-text list behaved.
 export const PantryItemSchema = z.object({
   name: z.string().trim().min(1).max(80),
+  amount: z.number().nonnegative().max(100_000).optional(),
+  unit: PantryUnitSchema.optional(),
+  // Written by versions before units existed; read, never written.
   grams: z.number().nonnegative().max(100_000).optional(),
 });
 export type PantryItem = z.infer<typeof PantryItemSchema>;
+
+// The weight this row covers, or null when it covers the item outright.
+export function pantryGrams(item: PantryItem): number | null {
+  if (item.amount === undefined) return item.grams ?? null;
+  const factor = UNIT_GRAMS[item.unit ?? 'g'];
+  return factor === null ? null : item.amount * factor;
+}
 
 // Meal slots in fixed daily order; `mealSlots` on the profile picks which of
 // them a generated day carries (breakfast, lunch and dinner by default).

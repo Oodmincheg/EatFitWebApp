@@ -17,11 +17,11 @@ due 2026-09-14 23:59 Kyiv, video pitch mandatory).
    regenerated with a free-text wish.
 4. Own dishes: the user's recipes with known kcal and macros (or a model estimate),
    pinned into slots of the week. Generation fills only the unpinned slots.
-5. Pantry: what is at home, with optional weights. Feeds generation and is subtracted
-   from the shopping list; what the Silpo cart bought can be pushed back into it.
+5. Pantry: what is at home, with optional amounts in g / kg / ml / l / pcs, saved as you
+   type. Feeds generation and is subtracted from the shopping list; what the Silpo cart
+   bought can be pushed back into it.
 6. Shopping list = plan ingredients minus what the pantry covers, grouped by aisle,
-   editable (own rows, corrected weights, struck-out rows) and exportable (copy, share,
-   print).
+   editable (own rows, corrected weights, struck-out rows) and copyable as plain text.
 7. Silpo cart: the list is matched against Silpo's live catalog through Silpo's official
    MCP server, reviewed with real prices and pack sizes, then written into the user's
    Silpo cart. Payment happens on silpo.ua (the MCP has no order-placement tool).
@@ -92,7 +92,8 @@ signs in on silpo.ua from the Cart page.
   home; `profile.ingredients` is derived from it on write and remains the one string the
   prompt and the matching read. The shopping list is derived client-side in
   `lib/shopping.ts` (bilingual stems for aisles and matching) and never persisted; a
-  pantry row without a weight removes the item, a row with one is subtracted from it. The
+  pantry row with no amount — or one counted in pieces — removes the item, a row with a
+  weight or volume is converted to grams (ml counts as g) and subtracted from it. The
   user's own edits to that list live in localStorage, keyed by the plan.
 - Theme: the palette lives on `:root` as plain custom properties, `@theme inline` maps
   Tailwind's colour names onto them, and `[data-theme]` (cookie, read in the root layout)

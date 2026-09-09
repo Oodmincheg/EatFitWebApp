@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
@@ -12,7 +13,7 @@ import type { MealPlan, OrderItem, PantryItem, ShoppingItem } from '@/lib/schema
 
 type ListItem = ShoppingItem & { custom?: boolean };
 
-// Plain text for clipboard, share sheet and print.
+// Plain text for the clipboard.
 function toText(t: Dict, groups: { category: ShoppingItem['category']; items: ListItem[] }[]): string {
   return groups
     .map(({ category, items }) =>
@@ -104,23 +105,15 @@ export function ShoppingList({
     }
   };
 
-  const share = async () => {
-    try {
-      await navigator.share({ title: t.shopping.exportTitle, text: exportText() });
-    } catch {
-      // Cancelled or unsupported — nothing to report.
-    }
-  };
-
   return (
-    <section className="shopping-print rounded-[20px] border-2 border-ink bg-tomato p-5 text-white sm:p-6">
+    <section className="rounded-[20px] border-2 border-ink bg-tomato p-5 text-white sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-[11px] font-bold tracking-widest">{t.shopping.title(toBuy.length)}</h2>
         <div className="flex flex-wrap items-center gap-3">
           {checked.size > 0 && (
             <button
               onClick={uncheckAll}
-              className="no-print text-xs font-bold text-white/80 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="text-xs font-bold text-white/80 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               {t.shopping.uncheckAll(checked.size)}
             </button>
@@ -128,7 +121,7 @@ export function ShoppingList({
           {toBuy.length > 0 && (
             <button
               onClick={() => onOrder(toBuy.map(({ name, grams }) => ({ name, grams })))}
-              className="no-print rounded-full bg-white px-5 py-3 text-[14.5px] font-bold whitespace-nowrap text-tomato transition-colors hover:bg-peach focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="rounded-full bg-white px-5 py-3 text-[14.5px] font-bold whitespace-nowrap text-tomato transition-colors hover:bg-peach focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               {t.shopping.build}
             </button>
@@ -136,17 +129,9 @@ export function ShoppingList({
         </div>
       </div>
 
-      <div className="no-print mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
         <button onClick={copy} className="underline-offset-2 hover:underline">
           {t.shopping.copy}
-        </button>
-        {typeof navigator !== 'undefined' && 'share' in navigator && (
-          <button onClick={share} className="underline-offset-2 hover:underline">
-            {t.shopping.share}
-          </button>
-        )}
-        <button onClick={() => window.print()} className="underline-offset-2 hover:underline">
-          {t.shopping.print}
         </button>
         {edits.removed.length > 0 && (
           <button onClick={restoreAll} className="text-white/80 underline-offset-2 hover:underline">
@@ -156,7 +141,18 @@ export function ShoppingList({
       </div>
 
       {items.length === 0 ? (
-        <p className="mt-3 font-semibold">{t.shopping.haveEverything}</p>
+        <p className="mt-3 font-semibold">
+          {t.shopping.haveEverything}
+          {pantry.length > 0 && (
+            <>
+              {' '}
+              <span className="font-normal text-white/80">{t.shopping.coveredByPantry}</span>{' '}
+              <Link href="/dashboard/pantry" className="font-bold underline underline-offset-2">
+                {t.shopping.pantryLink}
+              </Link>
+            </>
+          )}
+        </p>
       ) : (
         <>
           {toBuy.length === 0 && <p className="mt-3 font-semibold">{t.shopping.allTicked}</p>}
@@ -210,16 +206,13 @@ export function ShoppingList({
                         value={item.grams || ''}
                         onChange={(e) => setWeight(item.name, Math.max(0, Number(e.target.value)))}
                         aria-label={t.shopping.editQty(item.name)}
-                        className="no-print w-20 shrink-0 rounded-lg border-2 border-white/30 bg-transparent px-2 py-1 text-right font-mono text-xs font-bold text-white placeholder-white/50 focus:border-white focus:outline-none"
+                        className="w-20 shrink-0 rounded-lg border-2 border-white/30 bg-transparent px-2 py-1 text-right font-mono text-xs font-bold text-white placeholder-white/50 focus:border-white focus:outline-none"
                         placeholder={t.shopping.addGrams}
                       />
-                      <span className="hidden font-mono text-xs font-bold print:inline">
-                        {formatWeight(item.grams, t.units)}
-                      </span>
                       <button
                         onClick={() => removeItem(item.name)}
                         aria-label={t.shopping.removeItem(item.name)}
-                        className="no-print h-7 w-7 shrink-0 rounded-full border-2 border-white/30 text-xs font-bold text-white/80 hover:border-white hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                        className="h-7 w-7 shrink-0 rounded-full border-2 border-white/30 text-xs font-bold text-white/80 hover:border-white hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                       >
                         ×
                       </button>
@@ -232,7 +225,7 @@ export function ShoppingList({
         </>
       )}
 
-      <div className="no-print mt-5">
+      <div className="mt-5">
         {adding ? (
           <div className="flex flex-wrap items-center gap-2">
             <input

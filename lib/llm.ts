@@ -351,6 +351,14 @@ function dayPrompt(opts: {
   );
 }
 
+// Model output within ±10% is what the prompt asks for; retry only on a real
+// miss, so one sloppy answer does not cost every day a second call.
+const KCAL_TOLERANCE = 0.15;
+
+function offTarget(day: DayPlan, target: number): boolean {
+  return Math.abs(day.total_kcal - target) > target * KCAL_TOLERANCE;
+}
+
 // One day at a time: each call is small and fast, which is what lets the
 // plan route stream days to the client as they land.
 export async function generatePlanDay(opts: {
@@ -364,30 +372,55 @@ export async function generatePlanDay(opts: {
 }): Promise<DayPlan> {
   const pinnedDay = opts.pinnedDay ?? {};
   const free = freeSlots(pinnedDay, opts.slots);
-  let generated: ModelMeals = {};
-  if (free.length > 0) {
-    const result = await completeJson(daySchema(free), [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: dayPrompt({
-          profile: opts.profile,
-          day: opts.day,
-          slots: opts.slots,
-          pinnedDay,
-          locale: opts.locale,
-          avoid: opts.avoid ?? [],
-          preference: opts.preference,
-        }),
-      },
-    ]);
-    generated = result.meals;
+  if (free.length === 0) {
+    return withDayTotals({
+      day: opts.day,
+      meals: mergeMeals(opts.day, {}, pinnedDay, opts.slots),
+      total_kcal: 0,
+    });
   }
-  return withDayTotals({
+
+  const prompt = dayPrompt({
+    profile: opts.profile,
     day: opts.day,
-    meals: mergeMeals(opts.day, generated, pinnedDay, opts.slots),
-    total_kcal: 0,
+    slots: opts.slots,
+    pinnedDay,
+    locale: opts.locale,
+    avoid: opts.avoid ?? [],
+    preference: opts.preference,
   });
+
+  const build = async (messages: ChatMessage[]) => {
+    const result = await completeJson(daySchema(free), messages);
+    return withDayTotals({
+      day: opts.day,
+      meals: mergeMeals(opts.day, result.meals, pinnedDay, opts.slots),
+      total_kcal: 0,
+    });
+  };
+
+  const first = await build([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+  ]);
+  if (!offTarget(first, opts.profile.calorieTarget)) return first;
+
+  // Server-side totals say the day missed the target: say so and ask again,
+  // then keep whichever attempt came closer.
+  const second = await build([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+    { role: 'assistant', content: JSON.stringify({ meals: first.meals }) },
+    {
+      role: 'user',
+      content:
+        `That day totals ${first.total_kcal} kcal, but the target is ${opts.profile.calorieTarget} kcal. ` +
+        'Resize the portions (and swap dishes if you must) so the day lands within ±10% of the target. ' +
+        'Return the same JSON shape.',
+    },
+  ]);
+  const miss = (d: DayPlan) => Math.abs(d.total_kcal - opts.profile.calorieTarget);
+  return miss(second) < miss(first) ? second : first;
 }
 
 // `startDate` is the local date key ("YYYY-MM-DD") of the plan's first day.
@@ -443,7 +476,8 @@ export async function regenerateMealPlanDay(
     slots,
     locale,
     pinnedDay,
-    avoid: planMealNames(plan.days, dayIndex),
+    // Including the day being replaced: repeating it is the failure mode.
+    avoid: planMealNames(plan.days),
     preference,
   });
   return { ...plan, days: plan.days.map((d, i) => (i === dayIndex ? day : d)) };
@@ -481,6 +515,9 @@ function mealPrompt(
   );
 }
 
+const sameName = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
 // Regenerate one slot of one day, leaving the other meals of that day alone.
 export async function regenerateMeal(
   profile: Profile,
@@ -490,12 +527,34 @@ export async function regenerateMeal(
   locale: Locale,
   preference?: string
 ): Promise<MealPlan> {
-  const result = await completeJson(daySchema([slot]), [
+  const previous = plan.days[dayIndex].meals[slot]?.name ?? '';
+  const prompt = mealPrompt(profile, plan, dayIndex, slot, locale, preference);
+  const ask = async (messages: ChatMessage[]) => {
+    const result = await completeJson(daySchema([slot]), messages);
+    const out = result.meals[slot];
+    if (!out) throw new GenerationFailedError(`missing ${slot}`);
+    return out;
+  };
+
+  let meal = await ask([
     { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: mealPrompt(profile, plan, dayIndex, slot, locale, preference) },
+    { role: 'user', content: prompt },
   ]);
-  const meal = result.meals[slot];
-  if (!meal) throw new GenerationFailedError(`missing ${slot}`);
+  // "Replace this meal" that returns the same meal is a failed swap, so say
+  // it plainly and ask once more.
+  if (previous && sameName(meal.name, previous)) {
+    meal = await ask([
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: JSON.stringify({ meals: { [slot]: meal } }) },
+      {
+        role: 'user',
+        content:
+          `"${previous}" is the meal being replaced — returning it again is not a replacement. ` +
+          'Return a different dish, with a different main ingredient. Same JSON shape.',
+      },
+    ]);
+  }
   return {
     ...plan,
     days: plan.days.map((d, i) =>

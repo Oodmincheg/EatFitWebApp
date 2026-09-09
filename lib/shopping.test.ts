@@ -101,6 +101,28 @@ describe('shoppingList', () => {
     expect(items.find((i) => i.name === 'rice')).toBeUndefined();
   });
 
+  it('converts kilograms and litres to grams before subtracting', () => {
+    // rice needed: 560 g
+    expect(
+      shoppingList(plan, [{ name: 'rice', amount: 1, unit: 'kg' }]).find((i) => i.name === 'rice')
+    ).toBeUndefined();
+    const partial = shoppingList(plan, [{ name: 'rice', amount: 0.2, unit: 'kg' }]);
+    expect(partial.find((i) => i.name === 'rice')?.grams).toBe(360);
+    // millilitres count as grams
+    const milk = shoppingList(plan, [{ name: 'milk', amount: 0.2, unit: 'l' }]);
+    expect(milk.find((i) => i.name === 'milk')?.grams).toBe(150); // 50 g x 7 - 200
+  });
+
+  it('an amount in pieces says nothing about weight, so it covers the item', () => {
+    const items = shoppingList(plan, [{ name: 'eggs', amount: 10, unit: 'pc' }]);
+    expect(items.find((i) => i.name === 'eggs')).toBeUndefined();
+  });
+
+  it('reads the weight of rows written before units existed', () => {
+    const items = shoppingList(plan, [{ name: 'rice', grams: 200 }]);
+    expect(items.find((i) => i.name === 'rice')?.grams).toBe(360);
+  });
+
   it('is sorted alphabetically with usedIn meal names', () => {
     const items = shoppingList(plan, []);
     expect(items.map((i) => i.name)).toEqual([...items.map((i) => i.name)].sort());

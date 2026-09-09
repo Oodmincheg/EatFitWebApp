@@ -28,11 +28,23 @@ export function pantryToIngredients(pantry: PantryItem[]): string {
     .slice(0, 4000);
 }
 
+// Rows written before units existed carried plain grams.
+function coercePantry(pantry: PantryItem[]): PantryItem[] {
+  return pantry.map((item) =>
+    item.amount === undefined && item.grams !== undefined
+      ? { name: item.name, amount: item.grams, unit: 'g' as const }
+      : item
+  );
+}
+
 // Legacy profiles hold only the free-text `ingredients`; split it into
 // pantry rows on read so the pantry page has something to show.
 export function coerceProfile(profile: Profile): Profile {
-  if (profile.pantry?.length || !profile.ingredients?.trim()) {
-    return { ...profile, pantry: profile.pantry ?? [] };
+  if (profile.pantry?.length) {
+    return { ...profile, pantry: coercePantry(profile.pantry) };
+  }
+  if (!profile.ingredients?.trim()) {
+    return { ...profile, pantry: [] };
   }
   const pantry: PantryItem[] = profile.ingredients
     .split(/[,;\n]/)
