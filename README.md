@@ -49,6 +49,13 @@ Collections and indexes are created automatically on first use — no migrations
   `lib/i18n/{uk,en}.ts` (`uk` is the typed source of truth), the choice is a plain
   `eatfit_locale` cookie read by the root layout for `<html lang>` and by the generation
   routes, so menus are written in the same language as the UI.
+- Own dishes and pinned slots: `dishes` collection (name, ingredients with grams, kcal,
+  macros; `POST /api/dishes/estimate` asks the model for the numbers), and a weekly pin
+  template on the user document (`pins[day][slot] = dishId`, `PUT /api/pins`). Generation
+  and day regeneration receive the pinned meals (`lib/pins.ts`) and the model is asked
+  only for the free slots, balancing the day around the fixed kcal; a fully pinned
+  day or week never calls the model. Pinning while a plan exists swaps the slot in
+  place for today and future days.
 - The shopping list is derived client-side (`lib/shopping.ts`) — never persisted.
 - `POST /api/cart/silpo` matches the to-buy list against Silpo's live catalog through
   the MCP (`lib/silpo/cart.ts`): resolves the user's cart and a live delivery slot,

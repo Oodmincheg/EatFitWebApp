@@ -2,14 +2,21 @@ import 'server-only';
 import { z } from 'zod';
 import {
   DAY_NAMES,
-  ModelDaySchema,
-  ModelPlanSchema,
+  DishEstimateSchema,
+  MEAL_SLOTS,
+  ModelMealSchema,
   type DayName,
+  type DayPlan,
+  type DishEstimate,
+  type Meal,
   type MealPlan,
+  type MealSlot,
+  type ModelMeal,
   type Profile,
 } from './schemas';
 import { parseDateKey, weekdayName } from './dates';
 import type { Locale } from './i18n';
+import { freeSlots, withDayTotals, type PinnedDay, type PinnedWeek } from './pins';
 
 export class UpstreamError extends Error {}
 export class GenerationFailedError extends Error {}
@@ -40,28 +47,70 @@ const FRIDGE_LANGUAGE_RULE: Record<Locale, string> = {
 const SYSTEM_PROMPT =
   'You are a nutritionist. Respond with JSON only — no markdown, no commentary.';
 
-function userPrompt(profile: Profile, startDay: DayName, locale: Locale): string {
+const MEAL_JSON =
+  '{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]}';
+
+const MEAL_FIELDS_RULE =
+  'Each generated meal needs: name, kcal, protein_g, fat_g, carbs_g (whole grams of protein, fat and ' +
+  'carbohydrates in the meal, consistent with kcal: roughly 4 kcal per gram of protein or carbs and ' +
+  '9 kcal per gram of fat), and an ingredients array where each ingredient has a lowercase name and ' +
+  'grams (the weight of that ingredient used in the dish, realistic portions). ';
+
+function describeFixed(meal: Meal): string {
+  return (
+    `"${meal.name}" (${meal.kcal} kcal, protein ${meal.protein_g ?? '?'} g, ` +
+    `fat ${meal.fat_g ?? '?'} g, carbs ${meal.carbs_g ?? '?'} g)`
+  );
+}
+
+// One line per day: which slots the user pinned and which to generate.
+function daySpec(day: DayName, pinned: PinnedDay | undefined): string {
+  const free = freeSlots(pinned);
+  const fixed = MEAL_SLOTS.filter((s) => pinned?.[s]).map((s) => `${s} ${describeFixed(pinned![s]!)}`);
+  if (free.length === 0) {
+    return `- ${day}: all three meals are fixed by the user (${fixed.join('; ')}). Return "meals": {} for this day.`;
+  }
+  if (fixed.length === 0) return `- ${day}: generate breakfast, lunch, dinner.`;
+  return (
+    `- ${day}: fixed by the user: ${fixed.join('; ')}. Generate ${free.join(', ')} so the day ` +
+    `total including the fixed meals lands within ±10% of the target.`
+  );
+}
+
+function mealsJson(free: MealSlot[]): string {
+  return `{${free.map((s) => `"${s}":<meal>`).join(',')}}`;
+}
+
+function profileContext(profile: Profile): string {
   const ingredients = profile.ingredients.trim() || 'none provided';
   const tags = profile.dietaryTags.length
     ? profile.dietaryTags.map((t) => TAG_LABELS[t] ?? t).join(', ')
     : 'none';
   return (
-    LANGUAGE_RULE[locale] +
-    `Create a 7-day meal plan starting on ${startDay} (7 consecutive days: ` +
-    `${startDay} through ${DAY_NAMES[(DAY_NAMES.indexOf(startDay) + 6) % 7]}), ` +
-    `3 meals per day (breakfast, lunch, dinner), ` +
-    `targeting ${profile.calorieTarget} kcal/day (each day within ±10%). ` +
     `Use mostly these ingredients the user already has: ${ingredients} (fill gaps with common groceries). ` +
-    `Strictly respect these dietary restrictions: ${tags}. Goal: ${profile.goal}. ` +
-    `Each meal needs: name, kcal, protein_g, fat_g, carbs_g (whole grams of protein, fat and ` +
-    `carbohydrates in the meal — keep them consistent with kcal: roughly 4 kcal per gram of ` +
-    `protein or carbs and 9 kcal per gram of fat), and an ingredients array where each ingredient has a ` +
-    `lowercase name and grams (the weight of that ingredient used in the dish, realistic portions). ` +
-    `Each day needs total_kcal = sum of its meals. Return JSON matching exactly: ` +
-    `{"days":[{"day":"${startDay}","meals":{"breakfast":{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]},` +
-    `"lunch":{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]},` +
-    `"dinner":{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]}},` +
-    `"total_kcal":0}, ...]}`
+    `Strictly respect these dietary restrictions: ${tags}. Goal: ${profile.goal}. `
+  );
+}
+
+function userPrompt(
+  profile: Profile,
+  days: DayName[],
+  locale: Locale,
+  pinnedByIndex: (PinnedDay | undefined)[]
+): string {
+  const specs = days.map((d, i) => daySpec(d, pinnedByIndex[i])).join('\n');
+  const example = days
+    .map((d, i) => `{"day":"${d}","meals":${mealsJson(freeSlots(pinnedByIndex[i]))}}`)
+    .join(',');
+  return (
+    LANGUAGE_RULE[locale] +
+    `Create a 7-day meal plan starting on ${days[0]} (7 consecutive days: ${days[0]} through ${days[6]}), ` +
+    `3 meals per day (breakfast, lunch, dinner), targeting ${profile.calorieTarget} kcal/day (each day within ±10%). ` +
+    profileContext(profile) +
+    `Some slots already hold the user's own dishes; never change or repeat them, and generate only the requested slots:\n${specs}\n` +
+    MEAL_FIELDS_RULE +
+    `Return JSON with exactly 7 day objects in this order and only the requested meal keys per day, ` +
+    `matching exactly: {"days":[${example}]} where <meal> is ${MEAL_JSON}`
   );
 }
 
@@ -161,40 +210,85 @@ async function completeJson<S extends z.ZodTypeAny>(
   throw new GenerationFailedError(attempt.issue ?? 'invalid model output');
 }
 
+// ── Output schemas that depend on which slots are free ──────
+type ModelMeals = Partial<Record<MealSlot, ModelMeal>>;
+type ModelWeekOut = { days: { meals: ModelMeals }[] };
+
+const ModelMealsSchema = z.object({
+  breakfast: ModelMealSchema.optional(),
+  lunch: ModelMealSchema.optional(),
+  dinner: ModelMealSchema.optional(),
+});
+
+// Every free slot must be present; pinned slots may be omitted (or ignored).
+function weekSchema(free: MealSlot[][]) {
+  return z
+    .object({ days: z.array(z.object({ meals: ModelMealsSchema })).length(7) })
+    .superRefine((plan, ctx) => {
+      plan.days.forEach((day, i) => {
+        for (const slot of free[i]) {
+          if (!day.meals[slot]) {
+            ctx.addIssue({ code: 'custom', path: ['days', i, 'meals', slot], message: `missing ${slot}` });
+          }
+        }
+      });
+    });
+}
+
+function daySchema(free: MealSlot[]) {
+  return z.object({ meals: ModelMealsSchema }).superRefine((day, ctx) => {
+    for (const slot of free) {
+      if (!day.meals[slot]) {
+        ctx.addIssue({ code: 'custom', path: ['meals', slot], message: `missing ${slot}` });
+      }
+    }
+  });
+}
+
+// Pinned slots win; the rest comes from the model, normalized.
+function mergeMeals(
+  dayName: DayName,
+  generated: ModelMeals,
+  pinned: PinnedDay | undefined
+): DayPlan['meals'] {
+  const meals = {} as DayPlan['meals'];
+  for (const slot of MEAL_SLOTS) {
+    const fixed = pinned?.[slot];
+    if (fixed) {
+      meals[slot] = fixed;
+      continue;
+    }
+    const meal = generated[slot];
+    if (!meal) throw new GenerationFailedError(`missing ${slot} for ${dayName}`);
+    meals[slot] = normalizeMeal(meal);
+  }
+  return meals;
+}
+
 // Recompute totals server-side (don't trust model arithmetic); normalize
 // ingredients; assign day names positionally from startDate (don't trust
-// model ordering either).
-export function normalizePlan(plan: z.infer<typeof ModelPlanSchema>, startDate: string): MealPlan {
+// model ordering either); keep the user's pinned dishes as they are.
+export function normalizePlan(
+  plan: ModelWeekOut,
+  startDate: string,
+  pinned: PinnedWeek = {}
+): MealPlan {
   const startIdx = DAY_NAMES.indexOf(weekdayName(parseDateKey(startDate)));
   return {
     generatedAt: new Date().toISOString(),
     startDate,
     days: plan.days.map((day, i) => {
-      const meals = {
-        breakfast: normalizeMeal(day.meals.breakfast),
-        lunch: normalizeMeal(day.meals.lunch),
-        dinner: normalizeMeal(day.meals.dinner),
-      };
-      return {
-        day: DAY_NAMES[(startIdx + i) % 7],
-        meals,
-        total_kcal: meals.breakfast.kcal + meals.lunch.kcal + meals.dinner.kcal,
-        total_protein_g: meals.breakfast.protein_g + meals.lunch.protein_g + meals.dinner.protein_g,
-        total_fat_g: meals.breakfast.fat_g + meals.lunch.fat_g + meals.dinner.fat_g,
-        total_carbs_g: meals.breakfast.carbs_g + meals.lunch.carbs_g + meals.dinner.carbs_g,
-      };
+      const name = DAY_NAMES[(startIdx + i) % 7];
+      return withDayTotals({
+        day: name,
+        meals: mergeMeals(name, day.meals, pinned[name]),
+        total_kcal: 0,
+      });
     }),
   };
 }
 
-function normalizeMeal(meal: {
-  name: string;
-  kcal: number;
-  protein_g: number;
-  fat_g: number;
-  carbs_g: number;
-  ingredients: { name: string; grams: number }[];
-}) {
+function normalizeMeal(meal: ModelMeal): Meal {
   return {
     name: meal.name.trim(),
     kcal: Math.round(meal.kcal),
@@ -248,19 +342,28 @@ export async function parseFridgeImage(imageDataUrl: string, locale: Locale): Pr
 }
 
 // `startDate` is the local date key ("YYYY-MM-DD") of the plan's first day.
+// `pinned` holds the user's dishes per day name; only the other slots are
+// generated, and a fully pinned week never calls the model.
 export async function generateMealPlan(
   profile: Profile,
   startDate: string,
-  locale: Locale
+  locale: Locale,
+  pinned: PinnedWeek = {}
 ): Promise<MealPlan> {
-  const plan = await completeJson(ModelPlanSchema, [
+  const startIdx = DAY_NAMES.indexOf(weekdayName(parseDateKey(startDate)));
+  const days = Array.from({ length: 7 }, (_, i) => DAY_NAMES[(startIdx + i) % 7]);
+  const pinnedByIndex = days.map((d) => pinned[d]);
+  const free = pinnedByIndex.map(freeSlots);
+
+  if (free.every((f) => f.length === 0)) {
+    return normalizePlan({ days: days.map(() => ({ meals: {} })) }, startDate, pinned);
+  }
+
+  const plan = await completeJson(weekSchema(free), [
     { role: 'system', content: SYSTEM_PROMPT },
-    {
-      role: 'user',
-      content: userPrompt(profile, weekdayName(parseDateKey(startDate)), locale),
-    },
+    { role: 'user', content: userPrompt(profile, days, locale, pinnedByIndex) },
   ]);
-  return normalizePlan(plan, startDate);
+  return normalizePlan(plan, startDate, pinned);
 }
 
 function dayPrompt(
@@ -268,62 +371,85 @@ function dayPrompt(
   plan: MealPlan,
   dayIndex: number,
   locale: Locale,
+  pinnedDay: PinnedDay,
   preference?: string
 ): string {
-  const ingredients = profile.ingredients.trim() || 'none provided';
-  const tags = profile.dietaryTags.length
-    ? profile.dietaryTags.map((t) => TAG_LABELS[t] ?? t).join(', ')
-    : 'none';
+  const day = plan.days[dayIndex].day;
+  const free = freeSlots(pinnedDay);
+  const fixed = MEAL_SLOTS.filter((s) => pinnedDay[s]).map((s) => `${s} ${describeFixed(pinnedDay[s]!)}`);
   const otherMeals = plan.days
     .filter((_, i) => i !== dayIndex)
     .flatMap((d) => [d.meals.breakfast.name, d.meals.lunch.name, d.meals.dinner.name]);
   return (
     LANGUAGE_RULE[locale] +
-    `Create a fresh one-day meal plan for ${plan.days[dayIndex].day} to replace the current one, ` +
-    `3 meals (breakfast, lunch, dinner), targeting ${profile.calorieTarget} kcal total (within ±10%). ` +
+    `Create a fresh one-day meal plan for ${day} to replace the current one. ` +
+    (fixed.length
+      ? `These meals are the user's own dishes and stay as they are: ${fixed.join('; ')}. ` +
+        `Generate only ${free.join(', ')} so the day total including the fixed meals is ` +
+        `${profile.calorieTarget} kcal (within ±10%). `
+      : `3 meals (breakfast, lunch, dinner), targeting ${profile.calorieTarget} kcal total (within ±10%). `) +
     (preference
       ? `The user's wish for this day: "${preference}". Honor it unless it conflicts with the dietary restrictions. `
       : '') +
-    `Use mostly these ingredients the user already has: ${ingredients} (fill gaps with common groceries). ` +
-    `Strictly respect these dietary restrictions: ${tags}. Goal: ${profile.goal}. ` +
+    profileContext(profile) +
     `Avoid repeating meals already planned this week: ${otherMeals.join(', ')}. ` +
-    `Each meal needs: name, kcal, protein_g, fat_g, carbs_g (whole grams of protein, fat and ` +
-    `carbohydrates in the meal — keep them consistent with kcal: roughly 4 kcal per gram of ` +
-    `protein or carbs and 9 kcal per gram of fat), and an ingredients array where each ingredient has a ` +
-    `lowercase name and grams (the weight of that ingredient used in the dish, realistic portions). ` +
-    `Return JSON matching exactly: ` +
-    `{"meals":{"breakfast":{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]},` +
-    `"lunch":{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]},` +
-    `"dinner":{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]}}}`
+    MEAL_FIELDS_RULE +
+    `Return JSON matching exactly: {"meals":${mealsJson(free)}} where <meal> is ${MEAL_JSON}`
   );
 }
 
 // Regenerate a single day of an existing plan. The rest of the plan is kept
 // as-is (including generatedAt — the staleness check compares against the
 // full generation, and startDate — the day↔date mapping must not shift).
+// Pinned slots of that day are kept; a fully pinned day never calls the model.
 export async function regenerateMealPlanDay(
   profile: Profile,
   plan: MealPlan,
   dayIndex: number,
   locale: Locale,
+  pinnedDay: PinnedDay = {},
   preference?: string
 ): Promise<MealPlan> {
-  const result = await completeJson(ModelDaySchema, [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: dayPrompt(profile, plan, dayIndex, locale, preference) },
-  ]);
-  const meals = {
-    breakfast: normalizeMeal(result.meals.breakfast),
-    lunch: normalizeMeal(result.meals.lunch),
-    dinner: normalizeMeal(result.meals.dinner),
-  };
-  const day = {
-    day: plan.days[dayIndex].day,
-    meals,
-    total_kcal: meals.breakfast.kcal + meals.lunch.kcal + meals.dinner.kcal,
-    total_protein_g: meals.breakfast.protein_g + meals.lunch.protein_g + meals.dinner.protein_g,
-    total_fat_g: meals.breakfast.fat_g + meals.lunch.fat_g + meals.dinner.fat_g,
-    total_carbs_g: meals.breakfast.carbs_g + meals.lunch.carbs_g + meals.dinner.carbs_g,
-  };
+  const free = freeSlots(pinnedDay);
+  let generated: ModelMeals = {};
+  if (free.length > 0) {
+    const result = await completeJson(daySchema(free), [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: dayPrompt(profile, plan, dayIndex, locale, pinnedDay, preference) },
+    ]);
+    generated = result.meals;
+  }
+  const name = plan.days[dayIndex].day;
+  const day = withDayTotals({
+    day: name,
+    meals: mergeMeals(name, generated, pinnedDay),
+    total_kcal: 0,
+  });
   return { ...plan, days: plan.days.map((d, i) => (i === dayIndex ? day : d)) };
+}
+
+// kcal and macros of a whole dish from its ingredient list (the user can
+// still edit the numbers by hand).
+export async function estimateDish(
+  name: string | undefined,
+  ingredients: { name: string; grams: number }[]
+): Promise<DishEstimate> {
+  const list = ingredients.map((i) => `${i.name} ${i.grams} g`).join(', ');
+  const est = await completeJson(DishEstimateSchema, [
+    { role: 'system', content: SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content:
+        `Estimate the nutrition of the whole dish${name ? ` "${name}"` : ''} made from: ${list}. ` +
+        'Return totals for the entire dish (not per 100 g) as whole numbers, consistent with ' +
+        '4 kcal per gram of protein or carbs and 9 kcal per gram of fat. ' +
+        'Return JSON matching exactly: {"kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0}',
+    },
+  ]);
+  return {
+    kcal: Math.round(est.kcal),
+    protein_g: Math.round(est.protein_g),
+    fat_g: Math.round(est.fat_g),
+    carbs_g: Math.round(est.carbs_g),
+  };
 }

@@ -13,19 +13,21 @@ export function WeekView({
   eatenByDay,
   regeneratingDay,
   onRegenerateDay,
+  onPinSlot,
 }: {
   plan: MealPlan;
   target: number;
   eatenByDay?: Record<DayName, MealSlot[]>;
   regeneratingDay?: number | null;
   onRegenerateDay?: (dayIndex: number, preference: string) => void;
+  onPinSlot?: (dayIndex: number, slot: MealSlot, dishId: string | null) => void;
 }) {
   const start = planStart(plan);
   const todayKey = dateKey(new Date());
   return (
     <div className={GRID}>
       {plan.days.map((day, i) => {
-        // Only today and future days can be regenerated — the past is history.
+        // Only today and future days can be edited — the past is history.
         const editable = dateKey(addDays(start, i)) >= todayKey;
         return (
           <DayCard
@@ -38,6 +40,9 @@ export function WeekView({
               onRegenerateDay && editable
                 ? (preference) => onRegenerateDay(i, preference)
                 : undefined
+            }
+            onPin={
+              onPinSlot && editable ? (slot, dishId) => onPinSlot(i, slot, dishId) : undefined
             }
           />
         );

@@ -56,6 +56,8 @@ export const MealSchema = z.object({
   fat_g: z.number().nonnegative().optional(),
   carbs_g: z.number().nonnegative().optional(),
   ingredients: z.array(IngredientSchema),
+  // Set when the slot holds one of the user's own dishes (pinned).
+  dishId: z.string().optional(),
 });
 export type Meal = z.infer<typeof MealSchema>;
 
@@ -88,11 +90,12 @@ export type DayPlan = z.infer<typeof DayPlanSchema>;
 
 // What the model must return (generatedAt is added server-side). Fresh
 // output must carry macros on every meal; stored plans may not.
-const ModelMealSchema = MealSchema.required({
+export const ModelMealSchema = MealSchema.omit({ dishId: true }).required({
   protein_g: true,
   fat_g: true,
   carbs_g: true,
 });
+export type ModelMeal = z.infer<typeof ModelMealSchema>;
 const ModelDayPlanSchema = DayPlanSchema.extend({
   meals: z.object({
     breakfast: ModelMealSchema,
@@ -148,6 +151,55 @@ export const ParseFridgeBodySchema = z.object({
 // ── Day progress (meals checked off as eaten) ───────────────
 export const MealSlotSchema = z.enum(['breakfast', 'lunch', 'dinner']);
 export type MealSlot = z.infer<typeof MealSlotSchema>;
+export const MEAL_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner'];
+
+// ── User dishes (own recipes with known kcal and macros) ────
+export const DishInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  kcal: z.number().nonnegative().max(5000),
+  protein_g: z.number().nonnegative().max(1000),
+  fat_g: z.number().nonnegative().max(1000),
+  carbs_g: z.number().nonnegative().max(1000),
+  ingredients: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), grams: z.number().nonnegative().max(10_000) }))
+    .max(40),
+});
+export type DishInput = z.infer<typeof DishInputSchema>;
+
+// Client-facing dish (id is the Mongo ObjectId as hex).
+export interface Dish extends DishInput {
+  id: string;
+  createdAt: string;
+}
+
+// Ask the model for kcal and macros of a dish from its ingredient list.
+export const DishEstimateBodySchema = z.object({
+  name: z.string().trim().max(120).optional(),
+  ingredients: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), grams: z.number().positive().max(10_000) }))
+    .min(1)
+    .max(40),
+});
+export const DishEstimateSchema = z.object({
+  kcal: z.number().nonnegative(),
+  protein_g: z.number().nonnegative(),
+  fat_g: z.number().nonnegative(),
+  carbs_g: z.number().nonnegative(),
+});
+export type DishEstimate = z.infer<typeof DishEstimateSchema>;
+
+// ── Pinned slots: a weekly template of the user's dishes ────
+// pins[day][slot] = dish id. Generation fills only the unpinned slots.
+export const PinsSchema = z.partialRecord(DayNameSchema, z.partialRecord(MealSlotSchema, z.string()));
+export type Pins = z.infer<typeof PinsSchema>;
+
+export const PinBodySchema = z.object({
+  day: DayNameSchema,
+  slot: MealSlotSchema,
+  dishId: z.string().min(1).nullable(), // null = unpin
+  // The client's local date; the current plan is only patched for today/future days.
+  today: DateKeySchema.optional(),
+});
 
 export const DayProgressSchema = z.object({
   date: DateKeySchema,

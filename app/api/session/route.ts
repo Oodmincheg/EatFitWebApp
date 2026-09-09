@@ -74,7 +74,12 @@ export async function POST(req: Request) {
     // Include the plan: signing in with Google may switch to an existing
     // account whose plan the client hasn't seen yet.
     const plan = await latestPlan(user._id);
-    return NextResponse.json({ user: toSession(user), profile: user.profile ?? null, plan });
+    return NextResponse.json({
+      user: toSession(user),
+      profile: user.profile ?? null,
+      plan,
+      pins: user.pins ?? {},
+    });
   } catch {
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }

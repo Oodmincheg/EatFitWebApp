@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DishPicker } from './DishPicker';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
@@ -33,6 +34,7 @@ export function DayCard({
   target,
   eaten,
   onRegenerate,
+  onPin,
   regenerating = false,
 }: {
   day: DayPlan;
@@ -40,6 +42,8 @@ export function DayCard({
   eaten?: MealSlot[];
   // Present only for today/future days — past days are history.
   onRegenerate?: (preference: string) => void;
+  // Pin one of the user's dishes into a slot (null = unpin); same day rule.
+  onPin?: (slot: MealSlot, dishId: string | null) => void;
   regenerating?: boolean;
 }) {
   const { t } = useI18n();
@@ -47,6 +51,7 @@ export function DayCard({
   const offTarget = Math.abs(day.total_kcal - target) > target * 0.1;
   const macros = dayMacros(day);
   const [openSlot, setOpenSlot] = useState<MealSlot | null>(null);
+  const [pickerSlot, setPickerSlot] = useState<MealSlot | null>(null);
   const [regenOpen, setRegenOpen] = useState(false);
   const [preference, setPreference] = useState('');
   const openRow = MEAL_ROWS.find((r) => r.slot === openSlot);
@@ -106,14 +111,21 @@ export function DayCard({
               <button
                 onClick={() => setOpenSlot(slot)}
                 className={`w-full rounded-[9px] px-2 py-1.5 text-left hover:brightness-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
-                  isEaten ? 'bg-mint' : 'bg-cream'
+                  isEaten ? 'bg-mint' : meal.dishId ? 'bg-peach' : 'bg-cream'
                 }`}
                 aria-label={t.day.viewIngredients(meal.name)}
               >
                 <p
                   className={`flex items-center justify-between gap-1 text-[9px] font-bold tracking-wide ${accent}`}
                 >
-                  <span>{t.mealLabels[slot]}</span>
+                  <span>
+                    {t.mealLabels[slot]}
+                    {meal.dishId && (
+                      <span className="ml-1" title={t.pins.pinned} aria-label={t.pins.pinned}>
+                        📌
+                      </span>
+                    )}
+                  </span>
                   {isEaten && (
                     <span className="text-lime-deep" title={t.day.eaten} aria-label={t.day.eaten}>
                       ✓
@@ -140,6 +152,7 @@ export function DayCard({
           <>
             <p className={`text-[10px] font-bold tracking-wide ${openRow.accent}`}>
               {t.mealLabels[openRow.slot]} · {dayText.label.toUpperCase()}
+              {openMeal.dishId && <span className="ml-1.5 text-latte">📌 {t.pins.pinned}</span>}
             </p>
             <h2
               id="meal-ingredients-title"
@@ -177,9 +190,49 @@ export function DayCard({
             ) : (
               <p className="mt-4 text-sm text-latte">{t.day.noIngredients}</p>
             )}
+            {onPin && (
+              <div className="mt-5 flex flex-wrap justify-end gap-3">
+                {openMeal.dishId && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      onPin(openRow.slot, null);
+                      setOpenSlot(null);
+                    }}
+                  >
+                    {t.pins.unpin}
+                  </Button>
+                )}
+                <Button
+                  onClick={() => {
+                    setPickerSlot(openRow.slot);
+                    setOpenSlot(null);
+                  }}
+                >
+                  {t.pins.pin}
+                </Button>
+              </div>
+            )}
           </>
         )}
       </Modal>
+
+      {onPin && (
+        <DishPicker
+          open={pickerSlot !== null}
+          title={pickerSlot ? t.pins.pickTitle(t.meals[pickerSlot], dayText.label) : ''}
+          currentId={pickerSlot ? day.meals[pickerSlot].dishId : undefined}
+          onPick={(id) => {
+            if (pickerSlot) onPin(pickerSlot, id);
+            setPickerSlot(null);
+          }}
+          onUnpin={() => {
+            if (pickerSlot) onPin(pickerSlot, null);
+            setPickerSlot(null);
+          }}
+          onClose={() => setPickerSlot(null)}
+        />
+      )}
 
       <Modal
         open={regenOpen}

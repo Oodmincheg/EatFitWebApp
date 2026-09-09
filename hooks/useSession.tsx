@@ -9,17 +9,19 @@ import {
   useState,
 } from 'react';
 import { clearUserStorage } from '@/lib/clientStorage';
-import type { MealPlan, Profile, ProfileInput, Session } from '@/lib/schemas';
+import type { MealPlan, Pins, Profile, ProfileInput, Session } from '@/lib/schemas';
 
 interface SessionState {
   loading: boolean;
   user: Session | null;
   profile: Profile | null;
   plan: MealPlan | null;
+  pins: Pins;
   startGuest: () => Promise<Session>;
   startGoogle: (idToken: string) => Promise<Session>;
   saveProfile: (input: ProfileInput) => Promise<Profile>;
   setPlan: (plan: MealPlan) => void;
+  setPins: (pins: Pins) => void;
   logout: () => Promise<void>;
 }
 
@@ -36,8 +38,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlanState] = useState<MealPlan | null>(null);
+  const [pins, setPinsState] = useState<Pins>({});
 
-  // One bootstrap call on app load: cookie → user + profile + latest plan.
+  // One bootstrap call on app load: cookie → user + profile + latest plan + pins.
   useEffect(() => {
     let cancelled = false;
     fetch('/api/me')
@@ -48,6 +51,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setUser(data.user);
           setProfile(data.profile);
           setPlanState(data.plan);
+          setPinsState(data.pins ?? {});
         }
       })
       .catch(() => {})
@@ -70,6 +74,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
     setProfile(data.profile);
     setPlanState(data.plan ?? null);
+    setPinsState(data.pins ?? {});
     return data.user;
   }, []);
 
@@ -92,6 +97,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setPlan = useCallback((p: MealPlan) => setPlanState(p), []);
+  const setPins = useCallback((p: Pins) => setPinsState(p), []);
 
   const logout = useCallback(async () => {
     await fetch('/api/session', { method: 'DELETE' }).catch(() => {});
@@ -99,6 +105,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setPlanState(null);
+    setPinsState({});
   }, []);
 
   return (
@@ -108,10 +115,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         plan,
+        pins,
         startGuest,
         startGoogle,
         saveProfile,
         setPlan,
+        setPins,
         logout,
       }}
     >

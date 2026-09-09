@@ -57,3 +57,25 @@ describe('normalizePlan', () => {
     expect(plan.days[6].day).toBe('Thursday');
   });
 });
+
+describe('normalizePlan with pinned dishes', () => {
+  it('keeps pinned meals, merges generated ones and recomputes totals', () => {
+    const pinnedLunch = {
+      name: 'My oats',
+      kcal: 300,
+      protein_g: 10,
+      fat_g: 5,
+      carbs_g: 50,
+      ingredients: [],
+      dishId: 'd1',
+    };
+    // 2026-07-10 is a Friday, so days[0] is Friday.
+    const plan = normalizePlan(modelPlan(), '2026-07-10', { Friday: { lunch: pinnedLunch } });
+    const friday = plan.days[0];
+    expect(friday.meals.lunch.name).toBe('My oats');
+    expect(friday.meals.lunch.dishId).toBe('d1');
+    expect(friday.total_kcal).toBe(400 + 300 + 500);
+    expect(friday.total_protein_g).toBe(31 + 10 + 35);
+    expect(plan.days[1].meals.lunch.dishId).toBeUndefined();
+  });
+});

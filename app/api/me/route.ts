@@ -32,6 +32,7 @@ export async function GET() {
           : { kind: 'guest', uid: user._id },
       profile: user.profile ?? null,
       plan,
+      pins: user.pins ?? {},
     });
   } catch {
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

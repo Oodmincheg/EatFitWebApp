@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getUid, readJsonBody } from '@/lib/session';
-import { findUser, latestPlan, replaceLatestPlan } from '@/lib/db/queries';
+import { findUser, latestPlan, listDishes, replaceLatestPlan } from '@/lib/db/queries';
 import { GenerationFailedError, UpstreamError, regenerateMealPlanDay } from '@/lib/llm';
 import { addDays, dateKey, parseDateKey, planStart } from '@/lib/dates';
 import { getLocale } from '@/lib/i18n/server';
+import { pinnedWeek } from '@/lib/pins';
 import { RegenerateDayBodySchema } from '@/lib/schemas';
 
 export const runtime = 'nodejs';
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
 
   let profile;
   let plan;
+  let pinned;
   try {
     const user = await findUser(uid);
     if (!user) {
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
     if (!plan) {
       return NextResponse.json({ error: 'no_plan' }, { status: 409 });
     }
+    pinned = pinnedWeek(user.pins ?? {}, await listDishes(uid));
   } catch {
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
@@ -73,6 +76,7 @@ export async function POST(req: Request) {
       plan,
       dayIndex,
       await getLocale(),
+      pinned[plan.days[dayIndex].day] ?? {},
       preference?.trim() || undefined
     );
     await replaceLatestPlan(uid, updated);

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getUid, readJsonBody } from '@/lib/session';
-import { findUser, insertPlan } from '@/lib/db/queries';
+import { findUser, insertPlan, listDishes } from '@/lib/db/queries';
 import { GenerationFailedError, UpstreamError, generateMealPlan } from '@/lib/llm';
 import { dateKey, parseDateKey } from '@/lib/dates';
 import { getLocale } from '@/lib/i18n/server';
+import { pinnedWeek } from '@/lib/pins';
 import { GeneratePlanBodySchema } from '@/lib/schemas';
 
 export const runtime = 'nodejs';
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
   const startDate = await resolveStartDate(req);
 
   let profile;
+  let pinned;
   try {
     const user = await findUser(uid);
     if (!user) {
@@ -51,12 +53,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'no_profile' }, { status: 409 });
     }
     profile = user.profile;
+    // The user's own dishes pinned per day/slot; only the other slots are generated.
+    pinned = pinnedWeek(user.pins ?? {}, await listDishes(uid));
   } catch {
     return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 
   try {
-    const plan = await generateMealPlan(profile, startDate, await getLocale());
+    const plan = await generateMealPlan(profile, startDate, await getLocale(), pinned);
     await insertPlan(uid, plan);
     return NextResponse.json(plan);
   } catch (err) {

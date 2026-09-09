@@ -3,12 +3,16 @@ import { randomUUID } from 'crypto';
 import { getDb } from './client';
 import {
   coerceStoredPlan,
+  type DayName,
   type DayProgress,
+  type Dish,
+  type DishInput,
   type MealPlan,
   type MealSlot,
   type Order,
   type OrderItem,
   type OrderStatus,
+  type Pins,
   type Profile,
 } from '../schemas';
 
@@ -20,7 +24,15 @@ export interface UserDoc {
   email?: string;
   displayName?: string;
   profile?: Profile;
+  pins?: Pins; // weekly template of the user's dishes per day/slot
   createdAt: string;
+}
+
+export interface DishDoc extends DishInput {
+  _id: ObjectId;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PlanDoc {
@@ -58,6 +70,9 @@ async function progress() {
 }
 async function orders() {
   return (await getDb()).collection<OrderDoc>('orders');
+}
+async function dishes() {
+  return (await getDb()).collection<DishDoc>('dishes');
 }
 
 export async function findUser(uid: string): Promise<UserDoc | null> {
@@ -237,4 +252,77 @@ export async function updateOrderStatus(
     { returnDocument: 'after' }
   );
   return doc ? toOrder(doc) : null;
+}
+
+// ── Dishes ──────────────────────────────────────────────────
+function toDish(doc: DishDoc): Dish {
+  return {
+    id: doc._id.toHexString(),
+    name: doc.name,
+    kcal: doc.kcal,
+    protein_g: doc.protein_g,
+    fat_g: doc.fat_g,
+    carbs_g: doc.carbs_g,
+    ingredients: doc.ingredients,
+    createdAt: doc.createdAt,
+  };
+}
+
+export async function listDishes(uid: string): Promise<Dish[]> {
+  const docs = await (await dishes()).find({ userId: uid }).sort({ createdAt: -1 }).toArray();
+  return docs.map(toDish);
+}
+
+export async function getDish(uid: string, id: string): Promise<Dish | null> {
+  if (!ObjectId.isValid(id)) return null;
+  const doc = await (await dishes()).findOne({ _id: new ObjectId(id), userId: uid });
+  return doc ? toDish(doc) : null;
+}
+
+export async function createDish(uid: string, input: DishInput): Promise<Dish> {
+  const now = new Date().toISOString();
+  const doc: DishDoc = { _id: new ObjectId(), userId: uid, ...input, createdAt: now, updatedAt: now };
+  await (await dishes()).insertOne(doc);
+  return toDish(doc);
+}
+
+export async function updateDish(uid: string, id: string, input: DishInput): Promise<Dish | null> {
+  if (!ObjectId.isValid(id)) return null;
+  const doc = await (await dishes()).findOneAndUpdate(
+    { _id: new ObjectId(id), userId: uid },
+    { $set: { ...input, updatedAt: new Date().toISOString() } },
+    { returnDocument: 'after' }
+  );
+  return doc ? toDish(doc) : null;
+}
+
+export async function deleteDish(uid: string, id: string): Promise<boolean> {
+  if (!ObjectId.isValid(id)) return false;
+  const res = await (await dishes()).deleteOne({ _id: new ObjectId(id), userId: uid });
+  return res.deletedCount > 0;
+}
+
+// ── Pins ────────────────────────────────────────────────────
+export async function getPins(uid: string): Promise<Pins> {
+  const user = await (await users()).findOne({ _id: uid }, { projection: { pins: 1 } });
+  return user?.pins ?? {};
+}
+
+export async function setPin(
+  uid: string,
+  day: DayName,
+  slot: MealSlot,
+  dishId: string | null
+): Promise<Pins> {
+  const path = `pins.${day}.${slot}`;
+  const doc = await (await users()).findOneAndUpdate(
+    { _id: uid },
+    dishId ? { $set: { [path]: dishId } } : { $unset: { [path]: '' } },
+    { returnDocument: 'after', projection: { pins: 1 } }
+  );
+  return doc?.pins ?? {};
+}
+
+export async function savePins(uid: string, pins: Pins): Promise<void> {
+  await (await users()).updateOne({ _id: uid }, { $set: { pins } });
 }

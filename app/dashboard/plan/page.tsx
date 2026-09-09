@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { FridgeModal } from '@/components/dashboard/FridgeModal';
 import { SummaryCard } from '@/components/dashboard/SummaryCard';
 import { WeekSkeleton, WeekView } from '@/components/dashboard/WeekView';
+import { WeekTemplate } from '@/components/dashboard/WeekTemplate';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
+import { usePins } from '@/hooks/usePins';
 import { usePlan } from '@/hooks/usePlan';
 import { useProgress } from '@/hooks/useProgress';
 import { eatenByDayName, planRange } from '@/lib/dates';
@@ -18,6 +20,7 @@ export default function PlanPage() {
   const { t } = useI18n();
   const { profile, saveProfile } = useSession();
   const { plan, generating, regeneratingDay, error, generate, regenerateDay } = usePlan();
+  const { pin } = usePins();
   const { byDate } = useProgress(plan ? planRange(plan) : undefined);
   const toast = useToast();
   const [statusIdx, setStatusIdx] = useState(0);
@@ -127,6 +130,7 @@ export default function PlanPage() {
             eatenByDay={eatenByDayName(plan, byDate)}
             regeneratingDay={regeneratingDay}
             onRegenerateDay={regenerateDay}
+            onPinSlot={(i, slot, dishId) => pin(plan.days[i].day, slot, dishId)}
           />
           <p className="text-sm font-semibold text-latte">
             {t.plan.needGroceries}{' '}
@@ -139,13 +143,16 @@ export default function PlanPage() {
           </p>
         </>
       ) : (
-        <div className="rounded-3xl border-2 border-dashed border-sand py-16 text-center">
-          <p className="text-3xl" aria-hidden="true">
-            🍽️
-          </p>
-          <p className="mt-3 font-display text-lg font-extrabold">{t.plan.noPlan}</p>
-          <p className="mt-1 text-sm text-latte">{t.plan.noPlanText}</p>
-        </div>
+        <>
+          <div className="rounded-3xl border-2 border-dashed border-sand py-10 text-center">
+            <p className="text-3xl" aria-hidden="true">
+              🍽️
+            </p>
+            <p className="mt-3 font-display text-lg font-extrabold">{t.plan.noPlan}</p>
+            <p className="mt-1 text-sm text-latte">{t.plan.noPlanText}</p>
+          </div>
+          <WeekTemplate />
+        </>
       )}
 
       <FridgeModal
