@@ -3,10 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SilpoCart } from '@/components/dashboard/SilpoCart';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { useOrders } from '@/hooks/useOrders';
+import { usePantry } from '@/hooks/usePantry';
+import { mergePantry } from '@/lib/pantry';
 import { PENDING_CART_KEY } from '@/lib/stores';
 import type { OrderItem } from '@/lib/schemas';
 
@@ -14,7 +17,10 @@ export default function CartPage() {
   const { t } = useI18n();
   const { profile } = useSession();
   const { placeOrder } = useOrders();
+  const { pantry, saving, save } = usePantry();
   const toast = useToast();
+  // Offered once the cart is written: what was just bought is now at home.
+  const [committed, setCommitted] = useState(false);
   // undefined = still reading storage; null = nothing handed off.
   const [items, setItems] = useState<OrderItem[] | null | undefined>(undefined);
 
@@ -48,7 +54,37 @@ export default function CartPage() {
       </div>
 
       {items ? (
-        <SilpoCart items={items} onCommitted={() => placeOrder(items).catch(() => {})} />
+        <>
+          <SilpoCart
+            items={items}
+            onCommitted={() => {
+              setCommitted(true);
+              placeOrder(items).catch(() => {});
+            }}
+          />
+          {committed && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-ink bg-peach px-4 py-3 text-sm font-semibold">
+              <span>
+                <span aria-hidden="true">🧊 </span>
+                {t.pantry.subtitle}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={saving}
+                onClick={async () => {
+                  try {
+                    await save(mergePantry(pantry, items.map(({ name, grams }) => ({ name, grams }))));
+                    toast(t.pantry.fromCartDone);
+                  } catch {
+                    toast(t.pantry.saveFailed);
+                  }
+                }}
+              >
+                {t.pantry.fromCart}
+              </Button>
+            </div>
+          )}
+        </>
       ) : items === null ? (
         <div className="rounded-3xl border-2 border-dashed border-sand py-12 text-center">
           <p className="text-3xl" aria-hidden="true">

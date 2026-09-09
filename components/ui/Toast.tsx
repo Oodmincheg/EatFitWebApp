@@ -28,7 +28,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role="status"
-            className="rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-cream shadow-lg"
+            className="rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-ink-contrast shadow-lg"
           >
             {t.message}
           </div>

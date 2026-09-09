@@ -14,12 +14,23 @@ import { usePins } from '@/hooks/usePins';
 import { usePlan } from '@/hooks/usePlan';
 import { useProgress } from '@/hooks/useProgress';
 import { eatenByDayName, planRange } from '@/lib/dates';
-import type { DietaryTag } from '@/lib/schemas';
+import { profilePlanDays } from '@/lib/profile';
+import type { DietaryTag, MealPlan, PantryItem } from '@/lib/schemas';
 
 export default function PlanPage() {
   const { t } = useI18n();
   const { profile, saveProfile } = useSession();
-  const { plan, generating, regeneratingDay, error, generate, regenerateDay } = usePlan();
+  const {
+    plan,
+    draft,
+    generating,
+    regeneratingDay,
+    regeneratingMeal,
+    error,
+    generate,
+    regenerateDay,
+    regenerateMeal,
+  } = usePlan();
   const { pin } = usePins();
   const { byDate } = useProgress(plan ? planRange(plan) : undefined);
   const toast = useToast();
@@ -27,7 +38,7 @@ export default function PlanPage() {
   const [fridgeOpen, setFridgeOpen] = useState(false);
   const statusLines = t.plan.status;
 
-  // Rotating status line while the model works (5–30 s expected).
+  // Rotating status line while the model works on the next day.
   useEffect(() => {
     if (!generating) return;
     setStatusIdx(0);
@@ -45,15 +56,18 @@ export default function PlanPage() {
   const planOutdated =
     plan !== null && Date.parse(profile.createdAt) > Date.parse(plan.generatedAt);
 
-  // Fridge dialog confirmed: persist the list and dietary tags (so they're
+  // Fridge dialog confirmed: persist the pantry and dietary tags (so they're
   // prefilled next time and the server generates from them), then kick off
   // generation.
-  const startGeneration = async (ingredients: string, dietaryTags: DietaryTag[]) => {
+  const startGeneration = async (pantry: PantryItem[], dietaryTags: DietaryTag[]) => {
     setFridgeOpen(false);
     const tagsChanged =
       dietaryTags.length !== profile.dietaryTags.length ||
       dietaryTags.some((tag) => !profile.dietaryTags.includes(tag));
-    if (ingredients !== profile.ingredients || tagsChanged) {
+    const pantryChanged =
+      pantry.length !== profile.pantry.length ||
+      pantry.some((item, i) => item.name !== profile.pantry[i]?.name);
+    if (pantryChanged || tagsChanged) {
       try {
         await saveProfile({
           goal: profile.goal,
@@ -62,8 +76,11 @@ export default function PlanPage() {
           heightCm: profile.heightCm,
           sex: profile.sex,
           activityLevel: profile.activityLevel,
-          ingredients,
+          pantry,
           dietaryTags,
+          calorieTargetOverride: profile.calorieTargetOverride ?? null,
+          mealSlots: profile.mealSlots,
+          planDays: profile.planDays,
         });
       } catch {
         toast(t.plan.saveFridgeFailed);
@@ -72,6 +89,14 @@ export default function PlanPage() {
     }
     generate();
   };
+
+  // While generating, the finished days render as a partial plan and the
+  // rest of the week shows as placeholders.
+  const totalDays = draft?.totalDays ?? profilePlanDays(profile);
+  const draftPlan: MealPlan | null =
+    draft && draft.days.length > 0
+      ? { generatedAt: new Date().toISOString(), startDate: draft.startDate, days: draft.days }
+      : null;
 
   return (
     <>
@@ -87,7 +112,7 @@ export default function PlanPage() {
           </Button>
           {generating && (
             <span className="font-mono text-xs font-bold text-sand" role="status">
-              {statusLines[statusIdx]}
+              {t.plan.progress(draft?.days.length ?? 0, totalDays)} · {statusLines[statusIdx]}
             </span>
           )}
         </div>
@@ -121,7 +146,15 @@ export default function PlanPage() {
       )}
 
       {generating ? (
-        <WeekSkeleton />
+        draftPlan ? (
+          <WeekView
+            plan={draftPlan}
+            target={profile.calorieTarget}
+            pendingDays={Math.max(0, totalDays - draftPlan.days.length)}
+          />
+        ) : (
+          <WeekSkeleton days={totalDays} />
+        )
       ) : plan ? (
         <>
           <WeekView
@@ -129,7 +162,9 @@ export default function PlanPage() {
             target={profile.calorieTarget}
             eatenByDay={eatenByDayName(plan, byDate)}
             regeneratingDay={regeneratingDay}
+            regeneratingMeal={regeneratingMeal}
             onRegenerateDay={regenerateDay}
+            onRegenerateMeal={regenerateMeal}
             onPinSlot={(i, slot, dishId) => pin(plan.days[i].day, slot, dishId)}
           />
           <p className="text-sm font-semibold text-latte">
@@ -157,7 +192,7 @@ export default function PlanPage() {
 
       <FridgeModal
         open={fridgeOpen}
-        initial={profile.ingredients}
+        initial={profile.pantry}
         initialTags={profile.dietaryTags}
         onCancel={() => setFridgeOpen(false)}
         onGenerate={startGeneration}

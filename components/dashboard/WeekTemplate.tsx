@@ -5,20 +5,25 @@ import { DishPicker } from './DishPicker';
 import { useDishes } from '@/hooks/useDishes';
 import { useI18n } from '@/hooks/useI18n';
 import { usePins } from '@/hooks/usePins';
-import { DAY_NAMES, MEAL_SLOTS, type DayName, type MealSlot } from '@/lib/schemas';
+import { useSession } from '@/hooks/useSession';
+import { profileSlots } from '@/lib/profile';
+import { DAY_NAMES, DEFAULT_MEAL_SLOTS, type DayName, type MealSlot } from '@/lib/schemas';
 
-// The weekly pin template, shown before a plan exists: 7 days × 3 slots,
+// The weekly pin template, shown before a plan exists: seven days × the
+// profile's meal slots,
 // each either one of the user's dishes or empty for the AI to fill.
 export function WeekTemplate() {
   const { t } = useI18n();
   const { pins, pin } = usePins();
+  const { profile } = useSession();
   const { dishes } = useDishes();
+  const slots = profile ? profileSlots(profile) : DEFAULT_MEAL_SLOTS;
   const byId = useMemo(() => new Map(dishes.map((d) => [d.id, d])), [dishes]);
   const [picker, setPicker] = useState<{ day: DayName; slot: MealSlot } | null>(null);
   const currentId = picker ? pins[picker.day]?.[picker.slot] : undefined;
 
   return (
-    <section className="rounded-3xl border-2 border-ink bg-white p-4 sm:p-5">
+    <section className="rounded-3xl border-2 border-ink bg-paper p-4 sm:p-5">
       <h2 className="font-display text-lg font-extrabold">{t.pins.templateTitle}</h2>
       <p className="mt-1 text-sm font-semibold text-latte">{t.pins.templateText}</p>
 
@@ -29,7 +34,7 @@ export function WeekTemplate() {
               {t.days[day].short}
             </h3>
             <ul className="mt-2 flex flex-col gap-1.5">
-              {MEAL_SLOTS.map((slot) => {
+              {slots.map((slot) => {
                 const id = pins[day]?.[slot];
                 const dish = id ? byId.get(id) : undefined;
                 return (
@@ -37,7 +42,7 @@ export function WeekTemplate() {
                     <button
                       onClick={() => setPicker({ day, slot })}
                       className={`w-full rounded-[9px] px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
-                        dish ? 'bg-peach hover:brightness-[.97]' : 'border-2 border-dashed border-sand bg-white hover:border-ink'
+                        dish ? 'bg-peach hover:brightness-[.97]' : 'border-2 border-dashed border-sand bg-paper hover:border-ink'
                       }`}
                     >
                       <span className="block text-[9px] font-bold tracking-wide text-latte">

@@ -2,13 +2,15 @@
 
 import { useI18n } from '@/hooks/useI18n';
 import { formatWeight } from '@/lib/shopping';
-import type { DayPlan, Meal, MealSlot } from '@/lib/schemas';
+import { daySlots, type DayPlan, type Meal, type MealSlot } from '@/lib/schemas';
 
-const MEAL_ROWS: { slot: MealSlot; accent: string }[] = [
-  { slot: 'breakfast', accent: 'text-tomato' },
-  { slot: 'lunch', accent: 'text-lime-deep' },
-  { slot: 'dinner', accent: 'text-tomato-deep' },
-];
+const SLOT_ACCENT: Record<MealSlot, string> = {
+  breakfast: 'text-tomato',
+  morning_snack: 'text-latte',
+  lunch: 'text-lime-deep',
+  afternoon_snack: 'text-latte',
+  dinner: 'text-tomato-deep',
+};
 
 function mealWeight(meal: Meal): number {
   return meal.ingredients.reduce((sum, i) => sum + i.grams, 0);
@@ -33,16 +35,16 @@ export function TodayCard({
   onToggle: (slot: MealSlot, eaten: boolean) => void;
 }) {
   const { t } = useI18n();
-  const eatenKcal = MEAL_ROWS.filter(({ slot }) => eaten.includes(slot)).reduce(
-    (sum, { slot }) => sum + day.meals[slot].kcal,
-    0
-  );
+  const slots = daySlots(day);
+  const eatenKcal = slots
+    .filter((slot) => eaten.includes(slot))
+    .reduce((sum, slot) => sum + day.meals[slot]!.kcal, 0);
   const pct = Math.min(100, Math.round((eatenKcal / target) * 100));
-  const allDone = eaten.length === MEAL_ROWS.length;
+  const allDone = slots.every((slot) => eaten.includes(slot));
   const macros = dayMacros(day);
 
   return (
-    <section className="rounded-3xl border-2 border-ink bg-white p-5 sm:p-6">
+    <section className="rounded-3xl border-2 border-ink bg-paper p-5 sm:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-display text-lg font-extrabold">
           {allDone ? t.today.allDone : t.today.mealsTitle}
@@ -74,8 +76,8 @@ export function TodayCard({
       )}
 
       <ul className="mt-5 flex flex-col gap-2.5">
-        {MEAL_ROWS.map(({ slot, accent }) => {
-          const meal = day.meals[slot];
+        {slots.map((slot) => {
+          const meal = day.meals[slot]!;
           const isEaten = eaten.includes(slot);
           const weight = formatWeight(mealWeight(meal), t.units);
           return (
@@ -95,7 +97,7 @@ export function TodayCard({
                   aria-label={t.today.markEaten(t.meals[slot])}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={`block text-[10px] font-bold tracking-wide ${accent}`}>
+                  <span className={`block text-[10px] font-bold tracking-wide ${SLOT_ACCENT[slot]}`}>
                     {t.mealLabels[slot]}
                   </span>
                   <span

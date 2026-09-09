@@ -69,7 +69,7 @@ export default function DishesPage() {
           {dishes.map((dish) => (
             <li
               key={dish.id}
-              className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-3xl border-2 border-ink bg-white px-5 py-4"
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-3xl border-2 border-ink bg-paper px-5 py-4"
             >
               <div className="min-w-0 flex-1">
                 <p className="font-display text-[15px] font-extrabold">{dish.name}</p>

@@ -1,6 +1,7 @@
 import {
   DAY_NAMES,
   MEAL_SLOTS,
+  daySlots,
   type DayName,
   type DayPlan,
   type Dish,
@@ -42,13 +43,15 @@ export function pinnedWeek(pins: Pins, dishes: Dish[]): PinnedWeek {
   return week;
 }
 
-export function freeSlots(pinned: PinnedDay | undefined): MealSlot[] {
-  return MEAL_SLOTS.filter((slot) => !pinned?.[slot]);
+// The slots generation has to fill: the profile's active slots minus the
+// ones the user pinned a dish into.
+export function freeSlots(pinned: PinnedDay | undefined, slots: MealSlot[]): MealSlot[] {
+  return slots.filter((slot) => !pinned?.[slot]);
 }
 
 // Totals from the meals; macro totals only when every meal carries macros.
 export function withDayTotals(day: DayPlan): DayPlan {
-  const meals = MEAL_SLOTS.map((slot) => day.meals[slot]);
+  const meals = daySlots(day).map((slot) => day.meals[slot]!);
   const out: DayPlan = {
     day: day.day,
     meals: day.meals,
@@ -77,7 +80,7 @@ export function applyPinToPlan(
       const meals = { ...d.meals };
       if (meal) {
         meals[slot] = meal;
-      } else {
+      } else if (meals[slot]) {
         const rest = { ...meals[slot] };
         delete rest.dishId;
         meals[slot] = rest;
@@ -93,9 +96,9 @@ export function refreshDishInPlan(plan: MealPlan, dish: Dish): MealPlan {
   return {
     ...plan,
     days: plan.days.map((d) => {
-      if (!MEAL_SLOTS.some((slot) => d.meals[slot].dishId === dish.id)) return d;
+      if (!MEAL_SLOTS.some((slot) => d.meals[slot]?.dishId === dish.id)) return d;
       const meals = { ...d.meals };
-      for (const slot of MEAL_SLOTS) if (meals[slot].dishId === dish.id) meals[slot] = meal;
+      for (const slot of MEAL_SLOTS) if (meals[slot]?.dishId === dish.id) meals[slot] = meal;
       return withDayTotals({ ...d, meals });
     }),
   };
@@ -106,10 +109,10 @@ export function unlinkDishInPlan(plan: MealPlan, dishId: string): MealPlan {
   return {
     ...plan,
     days: plan.days.map((d) => {
-      if (!MEAL_SLOTS.some((slot) => d.meals[slot].dishId === dishId)) return d;
+      if (!MEAL_SLOTS.some((slot) => d.meals[slot]?.dishId === dishId)) return d;
       const meals = { ...d.meals };
       for (const slot of MEAL_SLOTS) {
-        if (meals[slot].dishId === dishId) {
+        if (meals[slot]?.dishId === dishId) {
           const rest = { ...meals[slot] };
           delete rest.dishId;
           meals[slot] = rest;

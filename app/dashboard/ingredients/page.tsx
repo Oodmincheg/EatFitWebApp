@@ -33,7 +33,7 @@ export default function IngredientsPage() {
       </div>
 
       {plan ? (
-        <ShoppingList plan={plan} ownedRaw={profile.ingredients} onOrder={buildCart} />
+        <ShoppingList plan={plan} pantry={profile.pantry} onOrder={buildCart} />
       ) : (
         <div className="rounded-3xl border-2 border-dashed border-sand py-12 text-center">
           <p className="text-3xl" aria-hidden="true">

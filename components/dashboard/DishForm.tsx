@@ -17,7 +17,7 @@ function num(s: string): number {
 }
 
 const inputCls =
-  'rounded-xl border-2 border-peach-line bg-white px-3 py-2 text-sm font-medium focus:border-ink focus:outline-none';
+  'rounded-xl border-2 border-peach-line bg-paper px-3 py-2 text-sm font-medium focus:border-ink focus:outline-none';
 
 // Create or edit one of the user's dishes: ingredients with grams plus the
 // dish's total kcal and macros, typed by hand or estimated by the model.

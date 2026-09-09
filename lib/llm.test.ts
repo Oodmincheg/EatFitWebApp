@@ -35,7 +35,7 @@ describe('normalizePlan', () => {
   const plan = normalizePlan(modelPlan(), '2026-07-10');
 
   it('rounds macros to whole grams', () => {
-    const breakfast = plan.days[0].meals.breakfast;
+    const breakfast = plan.days[0].meals.breakfast!;
     expect(breakfast.protein_g).toBe(31);
     expect(breakfast.fat_g).toBe(10);
     expect(breakfast.carbs_g).toBe(41);
@@ -72,10 +72,10 @@ describe('normalizePlan with pinned dishes', () => {
     // 2026-07-10 is a Friday, so days[0] is Friday.
     const plan = normalizePlan(modelPlan(), '2026-07-10', { Friday: { lunch: pinnedLunch } });
     const friday = plan.days[0];
-    expect(friday.meals.lunch.name).toBe('My oats');
-    expect(friday.meals.lunch.dishId).toBe('d1');
+    expect(friday.meals.lunch!.name).toBe('My oats');
+    expect(friday.meals.lunch!.dishId).toBe('d1');
     expect(friday.total_kcal).toBe(400 + 300 + 500);
     expect(friday.total_protein_g).toBe(31 + 10 + 35);
-    expect(plan.days[1].meals.lunch.dishId).toBeUndefined();
+    expect(plan.days[1].meals.lunch!.dishId).toBeUndefined();
   });
 });

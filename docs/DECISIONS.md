@@ -93,6 +93,46 @@ The owner's `~/.npmrc` routes npm to a private Artifactory; 67 lockfile entries 
 there and Vercel failed `npm install` with E401. `.npmrc` now pins `registry.npmjs.org`
 and the lockfile was rewritten (same tarballs, same integrity hashes).
 
+## 2026-09-09 · Meal slots are a per-profile list, days are a partial record
+
+Fixed breakfast/lunch/dinner ruled out snacks, which are where most people lose the
+calorie budget, and forced a seven-day horizon on users who only plan a few days ahead.
+`MEAL_SLOTS` now holds five ordered slots and the profile picks a subset (two to five);
+`DayPlan.meals` became `z.partialRecord(MealSlot, Meal)` and every consumer reads
+`daySlots(day)` instead of assuming three. Old plans parse and render unchanged, and a
+day keeps its own shape when regenerated, so changing the setting never reshapes history.
+
+## 2026-09-09 · Generate day by day and stream the days out
+
+One model call for the whole week meant 30–60 s of a skeleton, and a failure at the end
+cost the whole run. Generation is now one call per day, streamed to the client as NDJSON
+(`start` / `day` / `done` / `error`), and the plan document is written after every day —
+so a run that dies halfway leaves a shorter, valid plan instead of nothing. Costs more
+tokens than one big call and takes a similar wall-clock time; what changes is that the
+user watches the week fill in. Note for Vercel: this is a long-lived response, and Hobby
+caps function duration, so a seven-day run may need the plan-days setting lowered there.
+
+## 2026-09-09 · The pantry is structured data; `ingredients` is derived
+
+The fridge list was one free-text field editable only inside the generate dialog, so
+"I bought milk" had nowhere to go and the shopping list could not know quantities. The
+profile now carries `pantry: {name, grams?}[]` with its own page and its own route
+(`PUT /api/pantry`, which deliberately does not restamp `createdAt` and so does not mark
+the plan outdated). `profile.ingredients` is kept and derived from the pantry on every
+write, because the prompt and the owned-item matching read that one string. Rows without
+a weight behave exactly as the old list did; rows with one are subtracted from the
+shopping list instead of removing the item.
+
+## 2026-09-09 · Theme through CSS variables, not a Tailwind dark: variant
+
+Every colour was already a `--color-*` token, so the cheapest dark mode was one level of
+indirection: the palette lives on `:root`, `@theme inline` maps Tailwind's names onto it,
+and `[data-theme]` plus `prefers-color-scheme` swap the values. `bg-white` became
+`bg-paper` (a themed surface) everywhere except on the tomato and lime blocks, where
+white is a fixed accent; `ink` is the foreground in both themes, hence `ink-contrast`
+for the few elements that sit on top of it. The cookie is read in the root layout, so a
+pinned theme paints on the first frame.
+
 ## Open
 
 - Real token verification for Google sign-in (`firebase-admin` or Auth.js).

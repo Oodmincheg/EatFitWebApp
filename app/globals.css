@@ -1,22 +1,85 @@
 @import "tailwindcss";
 
+/* Palette lives on :root so the theme can be swapped at runtime; the theme
+   block below only maps Tailwind's color names onto these variables. */
+:root {
+  color-scheme: light;
+  --cream: #fff6ec;
+  --paper: #ffffff;
+  --ink: #2a1a12;
+  --ink-contrast: #fff6ec;
+  --tomato: #e8642c;
+  --tomato-deep: #c94e1c;
+  --lime: #7cb518;
+  --lime-deep: #5f8f13;
+  --peach: #ffe7d8;
+  --peach-line: #f0dcc7;
+  --mint: #e7f2d4;
+  --apricot: #ffd9c2;
+  --latte: #7a6a5e;
+  --sand: #a58c76;
+}
+
+/* Warm dark: the brand's tomato and lime stay saturated, everything else
+   flips. `ink` is the foreground in both themes, hence `ink-contrast` for
+   the few places that sit on top of it. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --cream: #17120f;
+  --paper: #211a16;
+  --ink: #f7ece2;
+  --ink-contrast: #17120f;
+  --tomato: #f4763c;
+  --tomato-deep: #d9581f;
+  --lime: #86c11c;
+  --lime-deep: #a8d94a;
+  --peach: #3b2b20;
+  --peach-line: #362b23;
+  --mint: #27331b;
+  --apricot: #4a2c19;
+  --latte: #b8a595;
+  --sand: #8d7767;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --cream: #17120f;
+    --paper: #211a16;
+    --ink: #f7ece2;
+    --ink-contrast: #17120f;
+    --tomato: #f4763c;
+    --tomato-deep: #d9581f;
+    --lime: #86c11c;
+    --lime-deep: #a8d94a;
+    --peach: #3b2b20;
+    --peach-line: #362b23;
+    --mint: #27331b;
+    --apricot: #4a2c19;
+    --latte: #b8a595;
+    --sand: #8d7767;
+  }
+}
+
 @theme inline {
   --font-sans: var(--font-instrument-sans), system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-instrument-sans), sans-serif;
   --font-mono: var(--font-space-mono), monospace;
 
-  --color-cream: #fff6ec;
-  --color-ink: #2a1a12;
-  --color-tomato: #e8642c;
-  --color-tomato-deep: #c94e1c;
-  --color-lime: #7cb518;
-  --color-lime-deep: #5f8f13;
-  --color-peach: #ffe7d8;
-  --color-peach-line: #f0dcc7;
-  --color-mint: #e7f2d4;
-  --color-apricot: #ffd9c2;
-  --color-latte: #7a6a5e;
-  --color-sand: #a58c76;
+  --color-cream: var(--cream);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-ink-contrast: var(--ink-contrast);
+  --color-tomato: var(--tomato);
+  --color-tomato-deep: var(--tomato-deep);
+  --color-lime: var(--lime);
+  --color-lime-deep: var(--lime-deep);
+  --color-peach: var(--peach);
+  --color-peach-line: var(--peach-line);
+  --color-mint: var(--mint);
+  --color-apricot: var(--apricot);
+  --color-latte: var(--latte);
+  --color-sand: var(--sand);
 }
 
 html {
@@ -86,4 +149,21 @@ html {
   .anim-float, .anim-drift, .anim-marquee { animation: none; }
   .squiggle-draw { animation: none; stroke-dashoffset: 0; }
   [data-reveal] { opacity: 1; translate: 0 0; transition: none; }
+}
+
+/* ---------- printing the shopping list ----------
+   Only the list survives; it prints as plain text on white. */
+@media print {
+  body { background: #fff; }
+  body :not(.shopping-print):not(.shopping-print *) { display: none !important; }
+  .shopping-print {
+    position: absolute;
+    inset: 0;
+    background: #fff !important;
+    color: #000 !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .shopping-print * { color: #000 !important; }
+  .no-print { display: none !important; }
 }

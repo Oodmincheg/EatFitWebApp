@@ -9,6 +9,7 @@ const NAV_ITEMS: { href: string; icon: string; key: keyof Dict['shell']['nav'] }
   { href: '/dashboard', icon: '🍽️', key: 'today' },
   { href: '/dashboard/plan', icon: '📅', key: 'plan' },
   { href: '/dashboard/dishes', icon: '🍲', key: 'dishes' },
+  { href: '/dashboard/pantry', icon: '🧊', key: 'pantry' },
   { href: '/dashboard/ingredients', icon: '🥕', key: 'ingredients' },
   { href: '/dashboard/cart', icon: '🛒', key: 'cart' },
   { href: '/dashboard/history', icon: '🗂️', key: 'history' },

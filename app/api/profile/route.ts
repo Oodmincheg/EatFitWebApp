@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { ProfileInputSchema, type Profile } from '@/lib/schemas';
+import { ProfileInputSchema, orderSlots, type Profile } from '@/lib/schemas';
 import { calorieTarget } from '@/lib/calories';
+import { pantryToIngredients } from '@/lib/profile';
 import { BodyError, getUid, readJsonBody } from '@/lib/session';
 import { upsertProfile } from '@/lib/db/queries';
 
@@ -30,10 +31,14 @@ export async function PUT(req: Request) {
     );
   }
 
-  // Server recomputes the target from raw inputs — client value is display-only.
+  // Server recomputes the target from raw inputs — the client value is
+  // display-only — unless the user pinned a target by hand.
+  const { calorieTargetOverride, mealSlots } = parsed.data;
   const profile: Profile = {
     ...parsed.data,
-    calorieTarget: calorieTarget(parsed.data),
+    ...(mealSlots ? { mealSlots: orderSlots(mealSlots) } : {}),
+    ingredients: pantryToIngredients(parsed.data.pantry),
+    calorieTarget: calorieTargetOverride ?? calorieTarget(parsed.data),
     createdAt: new Date().toISOString(),
   };
 

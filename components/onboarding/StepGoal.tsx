@@ -30,7 +30,7 @@ export function StepGoal({
             className={`rounded-2xl border-2 p-5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
               value === g.value
                 ? 'border-ink bg-peach'
-                : 'border-peach-line bg-white hover:border-ink'
+                : 'border-peach-line bg-paper hover:border-ink'
             }`}
           >
             <span className="text-2xl" aria-hidden="true">

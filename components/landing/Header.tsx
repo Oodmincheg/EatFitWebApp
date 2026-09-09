@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/Button';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Logo } from '@/components/ui/Logo';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -21,6 +22,7 @@ export function Header({ onLogin }: { onLogin: () => void }) {
             </a>
           </div>
           <LanguageToggle />
+          <ThemeToggle />
           <Button onClick={onLogin}>{t.landing.nav.start}</Button>
         </nav>
       </div>

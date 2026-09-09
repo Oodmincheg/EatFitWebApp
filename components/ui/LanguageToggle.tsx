@@ -22,7 +22,7 @@ export function LanguageToggle() {
             aria-pressed={active}
             onClick={() => setLocale(code)}
             className={`px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
-              active ? 'bg-ink text-white' : 'bg-white text-latte hover:bg-cream'
+              active ? 'bg-ink text-ink-contrast' : 'bg-paper text-latte hover:bg-cream'
             }`}
           >
             {LABELS[code]}

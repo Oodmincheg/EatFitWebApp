@@ -12,15 +12,22 @@ export function WeekView({
   target,
   eatenByDay,
   regeneratingDay,
+  regeneratingMeal,
   onRegenerateDay,
+  onRegenerateMeal,
   onPinSlot,
+  pendingDays = 0,
 }: {
   plan: MealPlan;
   target: number;
   eatenByDay?: Record<DayName, MealSlot[]>;
   regeneratingDay?: number | null;
+  regeneratingMeal?: { dayIndex: number; slot: MealSlot } | null;
   onRegenerateDay?: (dayIndex: number, preference: string) => void;
+  onRegenerateMeal?: (dayIndex: number, slot: MealSlot, preference: string) => void;
   onPinSlot?: (dayIndex: number, slot: MealSlot, dishId: string | null) => void;
+  // Placeholder cards for days the generator hasn't reached yet.
+  pendingDays?: number;
 }) {
   const start = planStart(plan);
   const todayKey = dateKey(new Date());
@@ -41,26 +48,41 @@ export function WeekView({
                 ? (preference) => onRegenerateDay(i, preference)
                 : undefined
             }
+            onRegenerateMeal={
+              onRegenerateMeal && editable
+                ? (slot, preference) => onRegenerateMeal(i, slot, preference)
+                : undefined
+            }
+            regeneratingSlot={regeneratingMeal?.dayIndex === i ? regeneratingMeal.slot : null}
             onPin={
               onPinSlot && editable ? (slot, dishId) => onPinSlot(i, slot, dishId) : undefined
             }
           />
         );
       })}
+      {Array.from({ length: pendingDays }, (_, i) => (
+        <DayCardSkeleton key={`pending-${i}`} />
+      ))}
     </div>
   );
 }
 
-export function WeekSkeleton() {
+function DayCardSkeleton() {
+  return (
+    <div className="rounded-2xl border-2 border-dashed border-sand bg-paper/60 p-3">
+      <Skeleton className="h-4 w-12" />
+      <Skeleton className="mt-3 h-14 w-full" />
+      <Skeleton className="mt-2 h-14 w-full" />
+      <Skeleton className="mt-2 h-14 w-full" />
+    </div>
+  );
+}
+
+export function WeekSkeleton({ days = 7 }: { days?: number }) {
   return (
     <div className={GRID}>
-      {Array.from({ length: 7 }, (_, i) => (
-        <div key={i} className="rounded-2xl border-2 border-ink bg-white p-3">
-          <Skeleton className="h-4 w-12" />
-          <Skeleton className="mt-3 h-14 w-full" />
-          <Skeleton className="mt-2 h-14 w-full" />
-          <Skeleton className="mt-2 h-14 w-full" />
-        </div>
+      {Array.from({ length: days }, (_, i) => (
+        <DayCardSkeleton key={i} />
       ))}
     </div>
   );

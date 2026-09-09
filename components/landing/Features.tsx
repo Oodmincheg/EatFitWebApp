@@ -24,7 +24,7 @@ export function Features() {
       <div className="mt-10 grid gap-4 md:grid-cols-3">
         {features.items.map((f, i) => (
           <Reveal key={f.title} delay={i * 0.12} className="h-full">
-            <article className="group h-full overflow-hidden rounded-[20px] border-2 border-ink bg-white transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-[6px_6px_0_var(--color-ink)]">
+            <article className="group h-full overflow-hidden rounded-[20px] border-2 border-ink bg-paper transition-all duration-300 ease-out hover:-translate-y-2 hover:shadow-[6px_6px_0_var(--color-ink)]">
               <div className="overflow-hidden border-b-2 border-ink">
                 <LandingImage
                   slot={IMAGES[i]}

@@ -20,6 +20,7 @@ interface SessionState {
   startGuest: () => Promise<Session>;
   startGoogle: (idToken: string) => Promise<Session>;
   saveProfile: (input: ProfileInput) => Promise<Profile>;
+  setProfile: (profile: Profile) => void;
   setPlan: (plan: MealPlan) => void;
   setPins: (pins: Pins) => void;
   logout: () => Promise<void>;
@@ -97,6 +98,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setPlan = useCallback((p: MealPlan) => setPlanState(p), []);
+  const setProfileValue = useCallback((p: Profile) => setProfile(p), []);
   const setPins = useCallback((p: Pins) => setPinsState(p), []);
 
   const logout = useCallback(async () => {
@@ -119,6 +121,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         startGuest,
         startGoogle,
         saveProfile,
+        setProfile: setProfileValue,
         setPlan,
         setPins,
         logout,
