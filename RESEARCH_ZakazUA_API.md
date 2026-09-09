@@ -1,3 +1,5 @@
+> **Status: superseded.** EatFit no longer calls `stores-api.zakaz.ua`; the grocery cart runs on Silpo's official MCP ([RESEARCH_SilpoMCP.md](./RESEARCH_SilpoMCP.md)). Kept as a record of the earlier backend.
+
 # Technical Notes — Zakaz.ua Backend API
 
 **Date probed:** July 10, 2026 (live requests from this machine)

@@ -1,3 +1,5 @@
+> **Status: superseded.** Silpo released an official MCP server on 2026-08-13 that writes the logged-in user's cart, which changes the ranking below: option 4 ("Silpo, avoid") is now the shipped path, option 1 (Zakaz.ua) was removed. See [RESEARCH_SilpoMCP.md](./RESEARCH_SilpoMCP.md).
+
 # Research — Turning a Shopping List into a Ready-to-Order Grocery Cart (Ukraine, 2026)
 
 **Date:** July 10, 2026

@@ -1,3 +1,5 @@
+> **Status: historical.** Implementation-ready spec of the July 2026 MVP. Sections 5.2 (three-step onboarding), 5.4 (mock order) and 6 (project structure) no longer match the code; §5.1, §5.3 and the data model in §4 are still broadly accurate (meals gained macros, per-ingredient grams and `dishId`). Current behavior: [README.md](./README.md).
+
 # Technical Specification — AI Meal Planner (Hackathon MVP)
 
 **Version:** 1.2 (persistence: MongoDB Atlas; supersedes 1.1 SQLite and 1.0 localStorage)

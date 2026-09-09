@@ -1,3 +1,5 @@
+> **Status: superseded on 2026-09-04.** The Zakaz.ua cart was replaced by the Silpo official MCP integration (`lib/silpo/`, [RESEARCH_SilpoMCP.md](./RESEARCH_SilpoMCP.md)) and all Zakaz code was removed. Kept because the matching pipeline (translation, candidate vetting, quantity sizing) carried over.
+
 # Feature Specification — Real Grocery Cart via Zakaz.ua
 
 **Version:** 1.0

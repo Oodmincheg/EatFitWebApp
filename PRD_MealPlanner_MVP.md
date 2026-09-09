@@ -1,3 +1,5 @@
+> **Status: historical.** The July 2026 hackathon MVP as designed. The shipped app differs: onboarding is two steps (fridge list and dietary tags moved into the generate dialog), grocery ordering is a real Silpo cart through the official MCP rather than a mock, the UI is Ukrainian-first with an English toggle, and users can pin their own dishes into the week. Current behavior: [README.md](./README.md); reasons: [docs/DECISIONS.md](./docs/DECISIONS.md).
+
 # PRD — AI Meal Planner (Hackathon MVP)
 
 **Version:** 1.0

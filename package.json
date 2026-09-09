@@ -1,5 +1,5 @@
 {
-  "name": "aibd-clauders",
+  "name": "eatfit-web-app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
-    "silpo:tools": "node scripts/silpo-tools-dump.mts"
+    "silpo:tools": "node scripts/silpo-tools-dump.mts",
+    "silpo:probe": "node scripts/silpo-probe.mts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

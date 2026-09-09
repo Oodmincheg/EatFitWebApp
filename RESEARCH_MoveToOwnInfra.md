@@ -1,3 +1,5 @@
+> **Status (2026-09-09): mostly executed.** Done: repo transferred to `Oodmincheg/EatFitWebApp`; Vercel Hobby project `eat-fit-web-app` deployed at https://eat-fit-web-app.vercel.app with all nine variables (a duplicate project was deleted); LLM switched to OpenRouter `openai/gpt-5.6-luna`; Atlas cluster resumed (it was paused, not deleted, and paused M0 clusters drop their SRV records); `.npmrc` pins npmjs after Vercel failed `npm install` against the lockfile's Artifactory URLs; `.env.local.example` added. Remaining: Firebase Authorized domains for the Vercel host, Silpo re-link on the new origin, a permanent LLM key (the current one is a 7-day test key), deleting `.silpo-probe.local.json`, the IP/permission check in §8.
+
 # Research: moving EatFit onto infrastructure the owner controls
 
 **Date:** September 6, 2026
