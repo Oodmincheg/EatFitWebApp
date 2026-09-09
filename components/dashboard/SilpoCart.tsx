@@ -330,7 +330,7 @@ function MatchedRow({
   const left = quantity <= 0;
   return (
     <li
-      className={`flex items-center gap-3 rounded-xl border-2 bg-white p-2.5 ${left ? 'border-dashed border-sand opacity-60' : 'border-sand'}`}
+      className={`relative flex items-center gap-3 rounded-xl border-2 bg-white p-2.5 ${p.weighted ? 'pr-7' : ''} ${left ? 'border-dashed border-sand opacity-60' : 'border-sand'}`}
     >
       {p.img ? (
         <Image src={p.img} alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-lg object-cover" unoptimized />
@@ -379,7 +379,38 @@ function MatchedRow({
           </Stepper>
         </div>
       )}
+      {p.weighted && <StepHint step={step} />}
     </li>
+  );
+}
+
+// "ⓘ" next to a weighted quantity: the store's minimum step explains numbers
+// like 0.55 kg for 120 g of bananas. Shows on hover, focus, or tap.
+function StepHint({ step }: { step: number }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const id = `step-hint-${String(step).replace('.', '-')}`;
+  return (
+    <span className="group absolute top-1.5 right-1.5 inline-flex">
+      <button
+        type="button"
+        aria-label={t.silpo.stepInfo}
+        aria-describedby={id}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setOpen(false)}
+        className="flex h-4 w-4 items-center justify-center rounded-full border border-sand text-[9px] font-bold leading-none text-latte hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato"
+      >
+        i
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className={`absolute right-0 top-full z-20 mt-1.5 w-64 rounded-xl border-2 border-ink bg-white p-3 text-left text-xs font-semibold leading-snug text-ink shadow-[4px_4px_0_var(--color-ink)] group-hover:block group-focus-within:block ${open ? 'block' : 'hidden'}`}
+      >
+        {t.silpo.stepHint(step)}
+      </span>
+    </span>
   );
 }
 

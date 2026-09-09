@@ -425,6 +425,9 @@ export const uk = {
     more: 'Більше',
     kgQty: (q: number) => `${q} кг`,
     packQty: (q: number) => `× ${q}`,
+    stepInfo: 'Чому така кількість',
+    stepHint: (step: number) =>
+      `Сільпо відпускає цей товар кроком ${step} кг: замовити можна ${step}, ${Math.round(step * 200) / 100}, ${Math.round(step * 300) / 100} кг і так далі, менше за ${step} кг не можна. Кількість округлена вгору від потрібної ваги до найближчого кроку.`,
     noMatch: 'Немає збігу в Сільпо',
     search: 'Шукати ↗',
     inCart: (n: number) => `${items(n)} у кошику · `,

@@ -17,7 +17,7 @@ function num(s: string): number {
 }
 
 const inputCls =
-  'w-full rounded-xl border-2 border-peach-line bg-white px-3 py-2 text-sm font-medium focus:border-ink focus:outline-none';
+  'rounded-xl border-2 border-peach-line bg-white px-3 py-2 text-sm font-medium focus:border-ink focus:outline-none';
 
 // Create or edit one of the user's dishes: ingredients with grams plus the
 // dish's total kcal and macros, typed by hand or estimated by the model.
@@ -128,7 +128,7 @@ export function DishForm({
           placeholder={f.namePlaceholder}
           maxLength={120}
           autoFocus
-          className={`mt-1.5 ${inputCls}`}
+          className={`mt-1.5 w-full ${inputCls}`}
         />
       </label>
 
@@ -142,7 +142,7 @@ export function DishForm({
               placeholder={f.ingredientName}
               maxLength={80}
               aria-label={f.ingredientName}
-              className={`flex-1 ${inputCls}`}
+              className={`min-w-0 flex-1 ${inputCls}`}
             />
             <input
               value={row.grams}
@@ -200,7 +200,7 @@ export function DishForm({
               onChange={(e) => set(e.target.value)}
               inputMode="decimal"
               placeholder="0"
-              className={`mt-1 ${inputCls}`}
+              className={`mt-1 w-full ${inputCls}`}
             />
           </label>
         ))}

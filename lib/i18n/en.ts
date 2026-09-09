@@ -395,6 +395,9 @@ export const en: Dict = {
     more: 'More',
     kgQty: (q: number) => `${q} kg`,
     packQty: (q: number) => `× ${q}`,
+    stepInfo: 'Why this quantity',
+    stepHint: (step: number) =>
+      `Silpo sells this item in steps of ${step} kg: you can order ${step}, ${Math.round(step * 200) / 100}, ${Math.round(step * 300) / 100} kg and so on, never less than ${step} kg. The quantity is the needed weight rounded up to the nearest step.`,
     noMatch: 'No match on Silpo',
     search: 'Search ↗',
     inCart: (n: number) => `${items(n)} in your cart · `,
