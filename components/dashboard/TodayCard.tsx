@@ -77,7 +77,7 @@ export function TodayCard({
         {MEAL_ROWS.map(({ slot, accent }) => {
           const meal = day.meals[slot];
           const isEaten = eaten.includes(slot);
-          const weight = formatWeight(mealWeight(meal), t.units);
+          const weight = formatWeight(mealWeight(meal), t.units, t.intl);
           return (
             <li key={slot}>
               <label

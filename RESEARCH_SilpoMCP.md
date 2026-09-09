@@ -1,4 +1,4 @@
-> **Status (2026-09-09): implemented and verified.** `lib/silpo/*`, the auth and cart routes and `SilpoCart.tsx` shipped; the build order in §8 is done except `DeliverySetup` (users without a Silpo cart get a notice instead). Verified live from localhost against Atlas: OAuth linking, cart resolution, batch search, LLM variant pick, quantity sizing. Not yet exercised: a real commit on a user cart, so the presence of `checkoutWebLink` after commit (§12) is still open. §6.2 (LiteLLM MCP gateway) is moot, LiteLLM was dropped for OpenRouter. Effort figures in §8 and §9 were planning estimates and are left as written.
+> **Status (2026-09-09): implemented and verified.** `lib/silpo/*`, the auth and cart routes and `SilpoCart.tsx` shipped; the build order in §8 is done except `DeliverySetup` (users without a Silpo cart get a notice instead). Verified live from localhost against Atlas: OAuth linking, cart resolution, batch search, LLM variant pick, quantity sizing. Owner update (2026-09-09): a real cart write was tested manually (screenshot with 21 products). Exact product/quantity reconciliation, repeat-write behavior and the presence of `checkoutWebLink` after commit (§12) remain unverified. §6.2 (LiteLLM MCP gateway) is moot, LiteLLM was dropped for OpenRouter. Effort figures in §8 and §9 were planning estimates and are left as written.
 
 # Research: Silpo official MCP as the EatFit ordering backend
 
@@ -226,7 +226,7 @@ Run with `npm run silpo:tools` (OAuth + `tools/list` → `docs/silpo-tools.json`
 
 ## 12. Open items (still unverified)
 
-1. Whether `checkoutWebLink` appears once the cart has a valid slot and products (needs a write test on a real cart).
+1. Whether `checkoutWebLink` appears once the cart has a valid slot and products. The owner confirmed a real write on 2026-09-09; detailed response/link verification is still open.
 2. Rate-limit numbers, MCP terms of use outside the hackathon, commercial use, any partner program.
 3. Whether the deployed LiteLLM proxy has the MCP gateway enabled and at which version.
 

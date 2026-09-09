@@ -358,6 +358,23 @@ export const en: Dict = {
   },
 
   silpo: {
+    summaryTitle: 'Review before adding',
+    summary: (selected: number, total: number, price: string) => `Adding ${selected} of ${total} shopping list items · ≈${price}`,
+    summaryNote: 'Selected products, excluding delivery. Silpo confirms the final total at checkout.',
+    missingItems: (names: string) => `Not matched: ${names}. Choose a product manually or search on Silpo.`,
+    excludedItems: (names: string) => `Not adding: ${names}`,
+    replace: 'Choose another product',
+    closeAlternatives: 'Hide alternatives',
+    noAlternatives: 'No other products in these search results',
+    alternativesNote: 'Silpo search results. Check the name, ingredients and pack size before choosing.',
+    optionTotal: (quantity: string, price: string) => `${quantity} · total ≈${price}`,
+    remove: 'Leave out',
+    buyWeight: (weight: string) => `${weight} in cart`,
+    leftover: (weight: string) => `${weight} left over`,
+    shortfall: (weight: string) => `${weight} short`,
+    unknownWeight: 'Pack weight unknown — check quantity manually',
+    stockExceeded: 'The combined quantity of identical products exceeds available stock. Reduce the quantity or choose another product.',
+
     readyTitle: '✅ Your Silpo cart is ready',
     reviewTitle: '🛒 Your Silpo cart',
     connectTitle: '🔗 Connect Silpo',
@@ -393,16 +410,17 @@ export const en: Dict = {
     addBack: 'Add back',
     less: 'Less',
     more: 'More',
-    kgQty: (q: number) => `${q} kg`,
+    kgQty: (q: number) => `${new Intl.NumberFormat('en-US').format(q)} kg`,
     packQty: (q: number) => `× ${q}`,
     stepInfo: 'Why this quantity',
-    stepHint: (step: number) =>
-      `Silpo sells this item in steps of ${step} kg: you can order ${step}, ${Math.round(step * 200) / 100}, ${Math.round(step * 300) / 100} kg and so on, never less than ${step} kg. The quantity is the needed weight rounded up to the nearest step.`,
+    stepHint: (step: number) => {
+      const number = new Intl.NumberFormat('en-US');
+      return `Silpo sells this item in steps of ${number.format(step)} kg: you can order ${number.format(step)}, ${number.format(Math.round(step * 200) / 100)}, ${number.format(Math.round(step * 300) / 100)} kg and so on, never less than ${number.format(step)} kg. The quantity is the needed weight rounded up to the nearest step.`;
+    },
     noMatch: 'No match on Silpo',
     search: 'Search ↗',
     inCart: (n: number) => `${items(n)} in your cart · `,
     bonuses: (n: number) => `🎁 You have ${n} balabonuses to spend on this order at checkout.`,
-    edit: 'Edit cart',
     openApp: 'Open in the Silpo app ↗',
     checkoutWeb: 'Checkout on silpo.ua ↗',
     validations: {

@@ -167,5 +167,7 @@ describe('ukrainian ingredients', () => {
   it('formats weight with the given units', () => {
     expect(formatWeight(650, { g: 'г', kg: 'кг' })).toBe('650 г');
     expect(formatWeight(1250, { g: 'г', kg: 'кг' })).toBe('1.3 кг');
+    expect(formatWeight(1250, { g: 'г', kg: 'кг' }, 'uk-UA')).toBe('1,3 кг');
+    expect(formatWeight(1250, { g: 'g', kg: 'kg' }, 'en-US')).toBe('1.3 kg');
   });
 });

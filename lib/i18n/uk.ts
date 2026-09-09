@@ -388,6 +388,23 @@ export const uk = {
   },
 
   silpo: {
+    summaryTitle: 'Перевір кошик перед додаванням',
+    summary: (selected: number, total: number, price: string) => `До додавання: ${selected} із ${total} позицій списку · ≈${price}`,
+    summaryNote: 'Вартість вибраних товарів без доставки. Остаточну суму Сільпо покаже під час оформлення.',
+    missingItems: (names: string) => `Не підібрано: ${names}. Обери варіант вручну або знайди на сайті Сільпо.`,
+    excludedItems: (names: string) => `Не додаємо: ${names}`,
+    replace: 'Обрати інший товар',
+    closeAlternatives: 'Сховати варіанти',
+    noAlternatives: 'Інших варіантів у результатах пошуку немає',
+    alternativesNote: 'Варіанти з пошуку Сільпо. Перевір назву, склад і розмір упаковки перед вибором.',
+    optionTotal: (quantity: string, price: string) => `${quantity} · разом ≈${price}`,
+    remove: 'Прибрати зі списку',
+    buyWeight: (weight: string) => `у кошику ${weight}`,
+    leftover: (weight: string) => `залишиться ${weight}`,
+    shortfall: (weight: string) => `бракує ${weight}`,
+    unknownWeight: 'Вага упаковки невідома — перевір кількість вручну',
+    stockExceeded: 'Сумарна кількість однакових товарів перевищує наявний залишок. Зменш кількість або обери інший товар.',
+
     readyTitle: '✅ Твій кошик у Сільпо готовий',
     reviewTitle: '🛒 Твій кошик у Сільпо',
     connectTitle: '🔗 Підключити Сільпо',
@@ -423,16 +440,17 @@ export const uk = {
     addBack: 'Повернути',
     less: 'Менше',
     more: 'Більше',
-    kgQty: (q: number) => `${q} кг`,
+    kgQty: (q: number) => `${new Intl.NumberFormat('uk-UA').format(q)} кг`,
     packQty: (q: number) => `× ${q}`,
     stepInfo: 'Чому така кількість',
-    stepHint: (step: number) =>
-      `Сільпо відпускає цей товар кроком ${step} кг: замовити можна ${step}, ${Math.round(step * 200) / 100}, ${Math.round(step * 300) / 100} кг і так далі, менше за ${step} кг не можна. Кількість округлена вгору від потрібної ваги до найближчого кроку.`,
+    stepHint: (step: number) => {
+      const number = new Intl.NumberFormat('uk-UA');
+      return `Сільпо відпускає цей товар кроком ${number.format(step)} кг: замовити можна ${number.format(step)}, ${number.format(Math.round(step * 200) / 100)}, ${number.format(Math.round(step * 300) / 100)} кг і так далі, менше за ${number.format(step)} кг не можна. Кількість округлена вгору від потрібної ваги до найближчого кроку.`;
+    },
     noMatch: 'Немає збігу в Сільпо',
     search: 'Шукати ↗',
     inCart: (n: number) => `${items(n)} у кошику · `,
     bonuses: (n: number) => `🎁 У тебе є ${n} балабонусів, які можна використати при оплаті.`,
-    edit: 'Редагувати кошик',
     openApp: 'Оформити в застосунку ↗',
     checkoutWeb: 'Оформити на сайті ↗',
     validations: {

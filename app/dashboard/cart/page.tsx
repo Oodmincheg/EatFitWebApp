@@ -48,7 +48,7 @@ export default function CartPage() {
       </div>
 
       {items ? (
-        <SilpoCart items={items} onCommitted={() => placeOrder(items).catch(() => {})} />
+        <SilpoCart items={items} onCommitted={(_, selectedItems) => placeOrder(selectedItems).catch(() => {})} />
       ) : items === null ? (
         <div className="rounded-3xl border-2 border-dashed border-sand py-12 text-center">
           <p className="text-3xl" aria-hidden="true">

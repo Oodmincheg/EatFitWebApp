@@ -254,67 +254,72 @@ export const SilpoCommitBodySchema = z.object({
 });
 export type SilpoCommitBody = z.infer<typeof SilpoCommitBodySchema>;
 
-export interface SilpoProduct {
-  productId: string;
-  companyId: string;
-  branchId: string;
-  slug: string;
-  title: string; // Ukrainian, from the catalog
-  price: number; // UAH; per kg when weighted, per pack otherwise
-  oldPrice: number | null; // UAH, set when discounted
-  weighted: boolean;
-  step: number; // kg increment when weighted, else 1
-  displayRatio: string | null; // pack content, e.g. "400г", "10шт"
-  stock: number; // kg when weighted, packs otherwise
-  img: string | null;
-  webUrl: string;
-}
+export const SilpoProductSchema = z.object({
+  productId: z.string().min(1),
+  companyId: z.string().min(1),
+  branchId: z.string().min(1),
+  slug: z.string(),
+  title: z.string(),
+  price: z.number().nonnegative(),
+  oldPrice: z.number().nullable(),
+  weighted: z.boolean(),
+  step: z.number().nonnegative(),
+  displayRatio: z.string().nullable(),
+  stock: z.number().nonnegative(),
+  img: z.string().nullable(),
+  webUrl: z.string(),
+});
+export type SilpoProduct = z.infer<typeof SilpoProductSchema>;
 
-export interface SilpoCartLine {
-  query: string; // English source name
-  uaQuery: string; // what was searched on Silpo (for the manual-search fallback)
-  neededGrams: number; // 0 = unknown
-  product: SilpoProduct | null;
-  quantity: number; // kg when weighted, packs otherwise
-  lineTotal: number; // UAH
-}
+export const SilpoCartLineSchema = z.object({
+  query: z.string(),
+  uaQuery: z.string(),
+  neededGrams: z.number().nonnegative(),
+  product: SilpoProductSchema.nullable(),
+  candidates: z.array(SilpoProductSchema).optional(),
+  quantity: z.number().nonnegative(),
+  lineTotal: z.number().nonnegative(),
+});
+export type SilpoCartLine = z.infer<typeof SilpoCartLineSchema>;
 
-export interface SilpoCart {
-  cartId: string;
-  branchId: string;
-  deliveryType: string;
-  // The slot the searches ran against. `stale` = the cart's own slot had
-  // expired and this replacement must be written on commit.
-  timeslot: { start: string; end: string; stale: boolean };
-  delivery: { minOrderCost: number; deliveryCost: number | null };
-  lines: SilpoCartLine[];
-  matchedCount: number;
-  total: number; // UAH, Σ lineTotal
-}
+export const SilpoCartSchema = z.object({
+  cartId: z.string(),
+  branchId: z.string(),
+  deliveryType: z.string(),
+  timeslot: z.object({ start: z.string(), end: z.string(), stale: z.boolean() }),
+  delivery: z.object({ minOrderCost: z.number(), deliveryCost: z.number().nullable() }),
+  lines: z.array(SilpoCartLineSchema),
+  matchedCount: z.number(),
+  total: z.number(),
+});
+export type SilpoCart = z.infer<typeof SilpoCartSchema>;
 
-export interface SilpoValidation {
-  level: string; // "error" | "warning" | "info"
-  type: string;
-  message: string;
-}
+export const SilpoValidationSchema = z.object({
+  level: z.string(),
+  type: z.string(),
+  message: z.string(),
+});
+export type SilpoValidation = z.infer<typeof SilpoValidationSchema>;
 
-export interface SilpoLoyalty {
-  bonusAvailable: number;
-  bonusTotal: number;
-  bonusRequested: number | null;
-  isEnabled: boolean;
-}
+export const SilpoLoyaltySchema = z.object({
+  bonusAvailable: z.number(),
+  bonusTotal: z.number(),
+  bonusRequested: z.number().nullable(),
+  isEnabled: z.boolean(),
+});
+export type SilpoLoyalty = z.infer<typeof SilpoLoyaltySchema>;
 
-export interface SilpoCommitResult {
-  cartId: string;
-  total: number;
-  totalAfterDiscounts: number;
-  itemCount: number;
-  validations: SilpoValidation[];
-  loyalty: SilpoLoyalty | null;
-  checkoutWebLink: string | null;
-  checkoutMobileLink: string | null;
-}
+export const SilpoCommitResultSchema = z.object({
+  cartId: z.string(),
+  total: z.number(),
+  totalAfterDiscounts: z.number(),
+  itemCount: z.number(),
+  validations: z.array(SilpoValidationSchema),
+  loyalty: SilpoLoyaltySchema.nullable(),
+  checkoutWebLink: z.string().nullable(),
+  checkoutMobileLink: z.string().nullable(),
+});
+export type SilpoCommitResult = z.infer<typeof SilpoCommitResultSchema>;
 
 // Client-facing order shape (id is the Mongo ObjectId as hex).
 export interface Order {

@@ -169,6 +169,7 @@ export function buildCart(uid: string, origin: string, items: OrderItem[]): Prom
       return {
         query: item.name,
         uaQuery: queries[item.name].query,
+        candidates,
         neededGrams: item.grams,
         product,
         quantity,

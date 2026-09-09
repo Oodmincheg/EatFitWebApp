@@ -32,8 +32,10 @@ Before pushing: typecheck, lint, test, build, all four green.
 
 - TypeScript strict. zod at every boundary: request bodies, model output, MCP tool
   results. Types come from `z.infer`, not hand-written twins.
-- Server-only modules start with `import 'server-only'` (`lib/llm.ts`, `lib/silpo/*`,
-  `lib/session.ts`, `lib/i18n/server.ts`). Tests mock it: `vi.mock('server-only', () => ({}))`.
+- Modules with server I/O, credentials or request cookies start with `import 'server-only'`.
+  Keep shared pure helpers and schemas browser-safe: `lib/silpo/quantity.ts`,
+  `lib/silpo/review.ts`, `lib/silpo/tools.ts`. Tests of server-only modules mock the marker:
+  `vi.mock('server-only', () => ({}))`.
 - API routes follow one shape: `getUid()` → 401 `no_session`; `readJsonBody()` →
   400/413; `Schema.safeParse` → 400 with `issues`; then try/catch mapping domain errors
   to snake_case codes. Add new codes to that vocabulary, do not invent HTTP-only signals.
