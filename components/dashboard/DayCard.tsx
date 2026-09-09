@@ -104,7 +104,7 @@ export function DayCard({
       <ul className={`mt-3 flex flex-1 flex-col gap-2 ${regenerating ? 'opacity-40' : ''}`}>
         {MEAL_ROWS.map(({ slot, accent }) => {
           const meal = day.meals[slot];
-          const weight = formatWeight(mealWeight(meal), t.units);
+          const weight = formatWeight(mealWeight(meal), t.units, t.intl);
           const isEaten = eaten?.includes(slot) ?? false;
           return (
             <li key={slot}>
@@ -162,8 +162,8 @@ export function DayCard({
             </h2>
             <p className="mt-0.5 font-mono text-xs font-bold text-sand">
               {openMeal.kcal} {t.units.kcal}
-              {formatWeight(mealWeight(openMeal), t.units) && (
-                <span className="text-sand/70"> · {formatWeight(mealWeight(openMeal), t.units)}</span>
+              {formatWeight(mealWeight(openMeal), t.units, t.intl) && (
+                <span className="text-sand/70"> · {formatWeight(mealWeight(openMeal), t.units, t.intl)}</span>
               )}
             </p>
             {openMacros && (
@@ -179,9 +179,9 @@ export function DayCard({
                     className="flex items-baseline justify-between gap-3 rounded-[9px] bg-cream px-3 py-2 text-sm font-semibold"
                   >
                     <span>{ing.name}</span>
-                    {formatWeight(ing.grams, t.units) && (
+                    {formatWeight(ing.grams, t.units, t.intl) && (
                       <span className="whitespace-nowrap font-mono text-xs font-bold text-latte">
-                        {formatWeight(ing.grams, t.units)}
+                        {formatWeight(ing.grams, t.units, t.intl)}
                       </span>
                     )}
                   </li>

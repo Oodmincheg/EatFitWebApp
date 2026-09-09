@@ -121,7 +121,7 @@ export function ShoppingList({
                           <span className="text-sm font-semibold capitalize">{item.name}</span>
                           {item.grams > 0 && (
                             <span className="ml-2 font-mono text-xs font-bold text-white/80">
-                              {formatWeight(item.grams, t.units)}
+                              {formatWeight(item.grams, t.units, t.intl)}
                             </span>
                           )}
                           <span className="block truncate text-xs text-white/65">

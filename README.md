@@ -17,7 +17,10 @@ due 2026-09-14 23:59 Kyiv, video pitch mandatory).
 5. Shopping list = plan ingredients minus what the user owns, grouped by aisle.
 6. Silpo cart: the list is matched against Silpo's live catalog through Silpo's official
    MCP server, reviewed with real prices and pack sizes, then written into the user's
-   Silpo cart. Payment happens on silpo.ua (the MCP has no order-placement tool).
+   Silpo cart. The review lets users choose another search result, leave items out,
+   and see purchased weight, leftovers or shortages. Its summary lists unmatched and
+   excluded ingredients and the estimated product total. Payment happens on silpo.ua
+   (the MCP has no order-placement tool).
 7. Daily check-off of eaten meals, plan history.
 
 ## Stack
@@ -80,6 +83,10 @@ signs in on silpo.ua from the Cart page.
   slot in place for today and future days. Pure helpers in `lib/pins.ts`.
 - The shopping list is derived client-side in `lib/shopping.ts` (bilingual stems for
   aisles and owned-item matching), never persisted.
+- Cart review state and requests live in `hooks/useSilpoCart.ts`. Quantity helpers
+  are shared by the server and browser; identical selected products are combined before
+  commit and checked against stock. After commit, checkout links lead to Silpo for further edits because the
+  add/update tool does not remove previously added products.
 - Silpo (`lib/silpo/`): `auth.ts` is a Mongo-backed `OAuthClientProvider` per user;
   `client.ts` wraps the MCP client and validates tool results with zod; `match.ts`
   translates item names to Ukrainian (Silpo search is Ukrainian-only) and lets the model

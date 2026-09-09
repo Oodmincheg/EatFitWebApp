@@ -174,11 +174,17 @@ export function shoppingList(plan: MealPlan, ownedRaw: string): ShoppingItem[] {
 export type WeightUnits = { g: string; kg: string };
 
 // "650 g" / "1.2 kg"; empty for unknown (0) weights from legacy plans.
-export function formatWeight(grams: number, units: WeightUnits = { g: 'g', kg: 'kg' }): string {
+export function formatWeight(
+  grams: number,
+  units: WeightUnits = { g: 'g', kg: 'kg' },
+  locale = 'en-US'
+): string {
   if (grams <= 0) return '';
-  if (grams >= 1000) {
-    const kg = grams / 1000;
-    return `${Number.isInteger(kg) ? kg : kg.toFixed(1)} ${units.kg}`;
-  }
-  return `${Math.round(grams)} ${units.g}`;
+  const value = grams >= 1000 ? grams / 1000 : Math.round(grams);
+  const digits = grams >= 1000 && !Number.isInteger(value) ? 1 : 0;
+  const formatted = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+  return `${formatted} ${grams >= 1000 ? units.kg : units.g}`;
 }

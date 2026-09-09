@@ -93,10 +93,25 @@ The owner's `~/.npmrc` routes npm to a private Artifactory; 67 lockfile entries 
 there and Vercel failed `npm install` with E401. `.npmrc` now pins `registry.npmjs.org`
 and the lockfile was rewritten (same tarballs, same integrity hashes).
 
+## 2026-09-09 · Review alternatives before committing the Silpo cart
+
+Return the existing search candidates with each ingredient so the user can choose a
+replacement without another search. Candidates are labelled as manual search results;
+the model only chooses the initial recommendation. Shared pure quantity helpers keep
+replacement sizing consistent with the initial cart. Weight explanations only claim a
+mass for weighted goods or packs with a mass label, not volume or piece counts.
+
+Combine identical product/company/branch selections before the add/update call, since
+its quantities replace rather than increment. After a successful commit, checkout links lead to
+Silpo for further edits: replacing or excluding a line locally would otherwise leave its old product in
+the real cart. No cart-removal tool is introduced by this change.
+
 ## Open
 
 - Real token verification for Google sign-in (`firebase-admin` or Auth.js).
 - A Cyrillic-capable font pairing.
 - `silpo_create_shopping_cart` flow for users with no delivery address.
-- Whether `checkoutWebLink` appears after a real commit (needs one write test on a real cart).
+- The owner confirmed a real cart write on 2026-09-09 (screenshot: 21 products).
+  Exact product/quantity reconciliation, repeat-write behavior and `checkoutWebLink`
+  still need detailed verification.
 - Permanent LLM key for production; the current OpenRouter key is a 7-day test key.
