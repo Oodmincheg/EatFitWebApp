@@ -14,7 +14,7 @@ import { usePins } from '@/hooks/usePins';
 import { usePlan } from '@/hooks/usePlan';
 import { useProgress } from '@/hooks/useProgress';
 import { eatenByDayName, planRange } from '@/lib/dates';
-import { profilePlanDays } from '@/lib/profile';
+import { profilePlanDays, profileSlots } from '@/lib/profile';
 import type { DietaryTag, MealPlan, PantryItem } from '@/lib/schemas';
 
 export default function PlanPage() {
@@ -93,8 +93,10 @@ export default function PlanPage() {
   // While generating, the finished days render as a partial plan and the
   // rest of the week shows as placeholders.
   const totalDays = draft?.totalDays ?? profilePlanDays(profile);
+  const slotCount = profileSlots(profile).length;
+  const readyDays = draft?.days.filter(Boolean).length ?? 0;
   const draftPlan: MealPlan | null =
-    draft && draft.days.length > 0
+    draft && readyDays > 0
       ? { generatedAt: new Date().toISOString(), startDate: draft.startDate, days: draft.days }
       : null;
 
@@ -102,19 +104,29 @@ export default function PlanPage() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-6">
         <SummaryCard profile={profile} />
-        <div className="flex flex-col items-start gap-2 sm:items-end">
+        {/* Fixed width: the button's label and the status line both change
+            while cooking, and neither may resize this column — a wider column
+            wraps the whole header and shifts the page. */}
+        <div className="flex w-full flex-col items-start gap-2 sm:w-[15rem] sm:items-end">
           <Button
-            className="px-6 py-3.5 text-[15px]"
+            className="w-full px-6 py-3.5 text-[15px]"
             onClick={() => setFridgeOpen(true)}
             disabled={generating || regeneratingDay !== null}
           >
             {generating ? t.plan.cooking : plan ? t.plan.regenerate : t.plan.generate}
           </Button>
-          {generating && (
-            <span className="font-mono text-xs font-bold text-sand" role="status">
-              {t.plan.progress(draft?.days.length ?? 0, totalDays)} · {statusLines[statusIdx]}
-            </span>
-          )}
+          {/* Always rendered, so the status appearing does not move the page. */}
+          <span
+            role="status"
+            aria-hidden={!generating}
+            className={`h-4 w-full truncate font-mono text-xs font-bold tabular-nums text-sand sm:text-right ${
+              generating ? '' : 'invisible'
+            }`}
+          >
+            {generating
+              ? `${t.plan.progress(readyDays, totalDays)} · ${statusLines[statusIdx]}`
+              : '\u00a0'}
+          </span>
         </div>
       </div>
 
@@ -151,9 +163,10 @@ export default function PlanPage() {
             plan={draftPlan}
             target={profile.calorieTarget}
             pendingDays={Math.max(0, totalDays - draftPlan.days.length)}
+            pendingSlots={slotCount}
           />
         ) : (
-          <WeekSkeleton days={totalDays} />
+          <WeekSkeleton days={totalDays} slots={slotCount} />
         )
       ) : plan ? (
         <>

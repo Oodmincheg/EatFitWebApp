@@ -75,10 +75,13 @@ signs in on silpo.ua from the Cart page.
   Google sign-in on a device with a guest cookie upgrades the same user document.
   `GET /api/me` is the single bootstrap call: cookie → user, profile, latest plan, pins.
 - `POST /api/generate-plan` reads the profile, pins and dishes from Mongo (the client
-  sends only its local `startDate`), then generates **one day per model call**, each with
-  a zod schema built for exactly that day's free slots, retrying once with the validation
-  error. Days stream back as NDJSON (`start` / `day` / `done` / `error`) and the plan
-  document is rewritten after each one, so an interrupted run leaves a shorter valid plan.
+  sends only its local `startDate`), then asks the model for the **whole plan in one
+  request** and reads the answer as it is written: `scanArrayObjects` lifts each finished
+  day object out of the half-written JSON, validates it against a schema built for that
+  day's free slots, and hands it on. Days stream back to the browser as NDJSON
+  (`start` / `day` / `done` / `error`) and the plan document is rewritten after each one,
+  so an interrupted run leaves a shorter valid plan. A day whose recomputed total misses
+  the target costs one small repair call, and usually costs none.
   Every total is recomputed server-side, and the client validates each streamed event
   against `PlanStreamEventSchema` before it touches state; a run that fails partway
   leaves the session on the persisted partial plan rather than the previous one.

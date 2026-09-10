@@ -17,6 +17,7 @@ export function WeekView({
   onRegenerateMeal,
   onPinSlot,
   pendingDays = 0,
+  pendingSlots = 3,
 }: {
   plan: MealPlan;
   target: number;
@@ -26,8 +27,10 @@ export function WeekView({
   onRegenerateDay?: (dayIndex: number, preference: string) => void;
   onRegenerateMeal?: (dayIndex: number, slot: MealSlot, preference: string) => void;
   onPinSlot?: (dayIndex: number, slot: MealSlot, dishId: string | null) => void;
-  // Placeholder cards for days the generator hasn't reached yet.
+  // Placeholder cards for days the generator hasn't reached yet, shaped like
+  // the real ones so nothing shifts when a day lands.
   pendingDays?: number;
+  pendingSlots?: number;
 }) {
   const start = planStart(plan);
   const todayKey = dateKey(new Date());
@@ -61,28 +64,36 @@ export function WeekView({
         );
       })}
       {Array.from({ length: pendingDays }, (_, i) => (
-        <DayCardSkeleton key={`pending-${i}`} />
+        <DayCardSkeleton key={`pending-${i}`} slots={pendingSlots} />
       ))}
     </div>
   );
 }
 
-function DayCardSkeleton() {
+// Mirrors DayCard's box model — same padding, header, macros line and one
+// block per meal — so a landed day replaces it without resizing the row.
+function DayCardSkeleton({ slots = 3 }: { slots?: number }) {
   return (
-    <div className="rounded-2xl border-2 border-dashed border-sand bg-paper/60 p-3">
-      <Skeleton className="h-4 w-12" />
-      <Skeleton className="mt-3 h-14 w-full" />
-      <Skeleton className="mt-2 h-14 w-full" />
-      <Skeleton className="mt-2 h-14 w-full" />
+    <div className="flex flex-col rounded-2xl border-2 border-dashed border-sand bg-paper/60 p-3">
+      <div className="flex items-baseline justify-between">
+        <Skeleton className="h-[18px] w-10" />
+        <Skeleton className="h-[13px] w-8" />
+      </div>
+      <Skeleton className="mt-1 h-3 w-24" />
+      <div className="mt-3 flex flex-1 flex-col gap-2">
+        {Array.from({ length: slots }, (_, i) => (
+          <Skeleton key={i} className="h-[54px] w-full" />
+        ))}
+      </div>
     </div>
   );
 }
 
-export function WeekSkeleton({ days = 7 }: { days?: number }) {
+export function WeekSkeleton({ days = 7, slots = 3 }: { days?: number; slots?: number }) {
   return (
     <div className={GRID}>
       {Array.from({ length: days }, (_, i) => (
-        <DayCardSkeleton key={i} />
+        <DayCardSkeleton key={i} slots={slots} />
       ))}
     </div>
   );

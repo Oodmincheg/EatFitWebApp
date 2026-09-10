@@ -83,7 +83,13 @@ export function usePlan() {
             setDraft({ startDate: event.startDate, totalDays: event.totalDays, days: [] });
           } else if (event.type === 'day') {
             landed += 1;
-            setDraft((prev) => (prev ? { ...prev, days: [...prev.days, event.day] } : prev));
+            setDraft((prev) => {
+              if (!prev) return prev;
+              // A repaired day comes back under the index it already had.
+              const days = [...prev.days];
+              days[event.index] = event.day;
+              return { ...prev, days };
+            });
           } else if (event.type === 'done') {
             setPlan(event.plan);
             landed = 0;
