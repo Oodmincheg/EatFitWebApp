@@ -6,54 +6,11 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
 import { useI18n } from '@/hooks/useI18n';
-import { FRIDGE_DRAFT_KEY } from '@/lib/clientStorage';
 import { DIETARY_TAGS } from '@/lib/dietary';
 import { mergePantry, parsePantryText, scanFridgePhoto } from '@/lib/pantry';
 import type { DietaryTag, PantryItem } from '@/lib/schemas';
 
 const MAX_LENGTH = 2000;
-
-// Unconfirmed edits survive closing the dialog or reloading the tab; the
-// draft is dropped once the user generates (the profile stores it then).
-function readDraft(): { value: string; tags: DietaryTag[] } | null {
-  try {
-    const raw = sessionStorage.getItem(FRIDGE_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      typeof (parsed as { value?: unknown }).value !== 'string' ||
-      !Array.isArray((parsed as { tags?: unknown }).tags)
-    ) {
-      return null;
-    }
-    const known = new Set<DietaryTag>(DIETARY_TAGS);
-    const { value, tags } = parsed as { value: string; tags: unknown[] };
-    return {
-      value: value.slice(0, MAX_LENGTH),
-      tags: tags.filter((t): t is DietaryTag => known.has(t as DietaryTag)),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeDraft(value: string, tags: DietaryTag[]) {
-  try {
-    sessionStorage.setItem(FRIDGE_DRAFT_KEY, JSON.stringify({ value, tags }));
-  } catch {
-    // Storage full or unavailable — the draft just won't survive.
-  }
-}
-
-function clearDraft() {
-  try {
-    sessionStorage.removeItem(FRIDGE_DRAFT_KEY);
-  } catch {
-    // Ignore.
-  }
-}
 
 // Append detected items to whatever the user already typed, skipping ones
 // that are already in the list.
@@ -63,9 +20,11 @@ function mergeText(current: string, items: string[]): string {
 }
 
 // Pre-generation dialog: what's in the fridge right now, plus dietary
-// preferences. Both are saved to the profile so they're prefilled next time.
-// Names are edited as free text here (fast bulk entry, photo scan); weights
-// live on the Pantry page, and this dialog keeps the ones it recognizes.
+// preferences. It always opens on the current pantry — the pantry is the
+// source of truth and saves itself, so a half-typed draft from an earlier
+// visit must never shadow it. Names are edited as free text here (fast bulk
+// entry, photo scan); weights live on the Pantry page and survive any name
+// this dialog leaves untouched.
 export function FridgeModal({
   open,
   initial,
@@ -86,22 +45,15 @@ export function FridgeModal({
   const [scanError, setScanError] = useState<'noFood' | 'readFailed' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Re-seed each time the dialog opens: an unconfirmed draft from this
-  // browser session wins over the saved pantry.
+  // Re-seed from the pantry every time the dialog opens.
   useEffect(() => {
     if (open) {
-      const draft = readDraft();
-      setValue(draft?.value ?? initial.map((item) => item.name).join(', '));
-      setTags(draft?.tags ?? initialTags);
+      setValue(initial.map((item) => item.name).join(', '));
+      setTags(initialTags);
       setScanning(false);
       setScanError(null);
     }
   }, [open, initial, initialTags]);
-
-  // Keep the draft in sync while the dialog is open.
-  useEffect(() => {
-    if (open) writeDraft(value, tags);
-  }, [open, value, tags]);
 
   const toggleTag = (tag: DietaryTag) =>
     setTags((prev) =>
@@ -143,7 +95,6 @@ export function FridgeModal({
     const pantry = parsePantryText(value).map(
       (item) => byName.get(item.name.toLowerCase()) ?? item
     );
-    clearDraft();
     onGenerate(pantry, tags);
   };
 

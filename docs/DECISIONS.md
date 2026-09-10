@@ -128,6 +128,13 @@ about weight and so covers the item outright. The page saves as you type: an exp
 button left people with a pantry that looked edited while everything else still read the
 old one.
 
+## 2026-09-10 · The pantry is the only source of the fridge list
+
+The pre-generation dialog used to keep unconfirmed edits in sessionStorage so a half-typed
+list survived a reload. Once the pantry became a saved, structured list that draft only
+shadowed it: edit the pantry, open the dialog, and yesterday's text was still there. The
+draft is gone and the dialog always opens on the current pantry.
+
 ## 2026-09-09 · Regeneration checks its own output
 
 Two failure modes were visible as soon as the flow was used in anger: "replace this meal"

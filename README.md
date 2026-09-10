@@ -10,7 +10,8 @@ due 2026-09-14 23:59 Kyiv, video pitch mandatory).
 
 1. Onboarding: goal, age, weight, height, sex, activity → Harris-Benedict daily kcal
    target, which My account can override by hand.
-2. Fridge contents and dietary tags (typed, or scanned from a photo by the model).
+2. Fridge contents and dietary tags, asked in the pre-generation dialog and seeded from
+   the current pantry (typed, or scanned from a photo by the model).
 3. The model writes the plan a day at a time and the week fills in as the days land:
    3–7 days, 2–5 meals a day (snacks optional, set in My account), with kcal, macros and
    per-ingredient grams, in the UI language. A whole day or a single meal can be
