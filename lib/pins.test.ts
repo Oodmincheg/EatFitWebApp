@@ -9,7 +9,7 @@ import {
   unlinkDishInPlan,
   withDayTotals,
 } from './pins';
-import { DAY_NAMES, type Dish, type Meal, type MealPlan } from './schemas';
+import { DAY_NAMES, DEFAULT_MEAL_SLOTS, type Dish, type Meal, type MealPlan } from './schemas';
 
 const oats: Dish = {
   id: 'd1',
@@ -57,8 +57,13 @@ describe('pinnedWeek', () => {
     expect(week.Monday?.breakfast?.name).toBe('Oats');
     expect(week.Monday?.lunch).toBeUndefined();
     expect(week.Friday).toBeUndefined();
-    expect(freeSlots(week.Monday)).toEqual(['lunch', 'dinner']);
-    expect(freeSlots(undefined)).toEqual(['breakfast', 'lunch', 'dinner']);
+    expect(freeSlots(week.Monday, DEFAULT_MEAL_SLOTS)).toEqual(['lunch', 'dinner']);
+    expect(freeSlots(undefined, DEFAULT_MEAL_SLOTS)).toEqual(['breakfast', 'lunch', 'dinner']);
+    // Snack slots are opt-in and only generated when the profile asks for them.
+    expect(freeSlots(week.Monday, ['breakfast', 'morning_snack', 'lunch'])).toEqual([
+      'morning_snack',
+      'lunch',
+    ]);
   });
 });
 
@@ -67,6 +72,12 @@ describe('withDayTotals', () => {
     const full = withDayTotals(plan().days[0]);
     expect(full.total_kcal).toBe(1500);
     expect(full.total_protein_g).toBe(30);
+    // A day with a snack slot totals four meals, not a hardcoded three.
+    const withSnack = withDayTotals({
+      ...plan().days[0],
+      meals: { ...plan().days[0].meals, morning_snack: meal(200, 'snack') },
+    });
+    expect(withSnack.total_kcal).toBe(1700);
     const legacy = withDayTotals({
       ...plan().days[0],
       meals: { ...plan().days[0].meals, dinner: { name: 'x', kcal: 100, ingredients: [] } },
@@ -80,13 +91,13 @@ describe('applyPinToPlan', () => {
   it('replaces the slot and recomputes totals; unpin only drops the link', () => {
     const pinned = applyPinToPlan(plan(), 'Tuesday', 'lunch', dishToMeal(oats));
     const tue = pinned.days.find((d) => d.day === 'Tuesday')!;
-    expect(tue.meals.lunch.dishId).toBe('d1');
+    expect(tue.meals.lunch!.dishId).toBe('d1');
     expect(tue.total_kcal).toBe(400 + 350 + 500);
     expect(tue.total_protein_g).toBe(10 + 12 + 10);
     expect(pinned.days.find((d) => d.day === 'Monday')!.total_kcal).toBe(1500);
 
     const unpinned = applyPinToPlan(pinned, 'Tuesday', 'lunch', null);
-    const lunch = unpinned.days.find((d) => d.day === 'Tuesday')!.meals.lunch;
+    const lunch = unpinned.days.find((d) => d.day === 'Tuesday')!.meals.lunch!;
     expect(lunch.dishId).toBeUndefined();
     expect(lunch.name).toBe('Oats');
   });
@@ -97,14 +108,14 @@ describe('dish edits and deletes', () => {
     let p = applyPinToPlan(plan(), 'Monday', 'breakfast', dishToMeal(oats));
     p = applyPinToPlan(p, 'Sunday', 'dinner', dishToMeal(oats));
     const edited = refreshDishInPlan(p, { ...oats, name: 'Big oats', kcal: 500 });
-    expect(edited.days[0].meals.breakfast.name).toBe('Big oats');
+    expect(edited.days[0].meals.breakfast!.name).toBe('Big oats');
     expect(edited.days[0].total_kcal).toBe(500 + 600 + 500);
-    expect(edited.days[6].meals.dinner.kcal).toBe(500);
+    expect(edited.days[6].meals.dinner!.kcal).toBe(500);
   });
 
   it('unlinkDishInPlan keeps the meal but removes dishId', () => {
     const p = applyPinToPlan(plan(), 'Monday', 'breakfast', dishToMeal(oats));
-    const b = unlinkDishInPlan(p, 'd1').days[0].meals.breakfast;
+    const b = unlinkDishInPlan(p, 'd1').days[0].meals.breakfast!;
     expect(b.dishId).toBeUndefined();
     expect(b.name).toBe('Oats');
   });

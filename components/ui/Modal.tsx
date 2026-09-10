@@ -46,7 +46,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className="w-full max-w-md rounded-3xl border-2 border-ink bg-white p-6 shadow-[0_16px_40px_-16px_rgba(42,26,18,.5)] outline-none"
+        className="w-full max-w-md rounded-3xl border-2 border-ink bg-paper p-6 shadow-[0_16px_40px_-16px_rgba(42,26,18,.5)] outline-none"
       >
         {children}
       </div>

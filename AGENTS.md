@@ -31,7 +31,9 @@ Before pushing: typecheck, lint, test, build, all four green.
 ## Code conventions
 
 - TypeScript strict. zod at every boundary: request bodies, model output, MCP tool
-  results. Types come from `z.infer`, not hand-written twins.
+  results, the generate-plan stream (`PlanStreamEventSchema`) and the session payload
+  the client reads back (`SessionPayloadSchema`). Types come from `z.infer`, not
+  hand-written twins.
 - Server-only modules start with `import 'server-only'` (`lib/llm.ts`, `lib/silpo/*`,
   `lib/session.ts`, `lib/i18n/server.ts`). Tests mock it: `vi.mock('server-only', () => ({}))`.
 - API routes follow one shape: `getUid()` → 401 `no_session`; `readJsonBody()` →
@@ -39,11 +41,21 @@ Before pushing: typecheck, lint, test, build, all four green.
   to snake_case codes. Add new codes to that vocabulary, do not invent HTTP-only signals.
 - Client data flows through hooks (`hooks/use*.ts`); components never `fetch` directly.
   `useSession` holds user, profile, plan, pins; anything that changes the plan on the
-  server returns the new plan and the hook pushes it into the session.
+  server returns the new plan and the hook pushes it into the session. The exception is
+  `POST /api/generate-plan`, which streams NDJSON — `usePlan` reads it and exposes the
+  finished days as `draft` while the rest is still cooking.
+- A day carries only the slots its profile asked for (`meals` is a partial record). Read
+  them with `daySlots(day)`; never index `meals.breakfast` without a check. Slot order is
+  `MEAL_SLOTS`, the profile's subset comes from `profileSlots(profile)`.
+- Colours go through the palette tokens, never literal `white`/`black`: `bg-paper` is a
+  surface, `bg-cream` the page, `text-ink` the foreground, `text-ink-contrast` only on
+  top of `bg-ink`. Literal `text-white` is correct on tomato and lime blocks alone.
 - Comments state a constraint the code cannot show, nothing else. No narration of what
   the next line does, no change history.
 - Pure logic lives in `lib/` with a sibling `*.test.ts` (`calories`, `shopping`, `pins`,
   `silpo/match`, `llm.normalizePlan`). Anything with I/O is thin and untested by design.
+- The pantry is the source of truth for what the user has; `profile.ingredients` is
+  derived from it on write and stays the one string the prompt and matching read.
 
 ## i18n
 

@@ -46,7 +46,7 @@ const ACTIVITY_LEVELS: ActivityLevel[] = ['sedentary', 'light', 'moderate', 'act
 const SEXES: Sex[] = ['male', 'female'];
 
 const inputCls =
-  'mt-1.5 w-full rounded-xl border-2 border-peach-line bg-white px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none';
+  'mt-1.5 w-full rounded-xl border-2 border-peach-line bg-paper px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none';
 
 export function StepParams({
   value,
@@ -106,7 +106,7 @@ export function StepParams({
                 className={`px-3 py-2.5 text-sm transition-colors ${
                   value.sex === s
                     ? 'bg-tomato font-bold text-white'
-                    : 'bg-white font-semibold text-latte hover:bg-cream'
+                    : 'bg-paper font-semibold text-latte hover:bg-cream'
                 }`}
               >
                 {t.sex[s]}

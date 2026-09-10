@@ -2,9 +2,11 @@ import 'server-only';
 import { z } from 'zod';
 import {
   DAY_NAMES,
+  DEFAULT_MEAL_SLOTS,
   DishEstimateSchema,
-  MEAL_SLOTS,
+  MealSlotSchema,
   ModelMealSchema,
+  daySlots,
   type DayName,
   type DayPlan,
   type DishEstimate,
@@ -17,6 +19,7 @@ import {
 import { parseDateKey, weekdayName } from './dates';
 import type { Locale } from './i18n';
 import { freeSlots, withDayTotals, type PinnedDay, type PinnedWeek } from './pins';
+import { profilePlanDays, profileSlots } from './profile';
 
 export class UpstreamError extends Error {}
 export class GenerationFailedError extends Error {}
@@ -47,6 +50,19 @@ const FRIDGE_LANGUAGE_RULE: Record<Locale, string> = {
 const SYSTEM_PROMPT =
   'You are a nutritionist. Respond with JSON only — no markdown, no commentary.';
 
+// The model sees the slot keys verbatim, so they need a plain-English gloss.
+const SLOT_LABELS: Record<MealSlot, string> = {
+  breakfast: 'breakfast',
+  morning_snack: 'a light morning snack',
+  lunch: 'lunch',
+  afternoon_snack: 'a light afternoon snack',
+  dinner: 'dinner',
+};
+
+function slotList(slots: MealSlot[]): string {
+  return slots.map((s) => `${s} (${SLOT_LABELS[s]})`).join(', ');
+}
+
 const MEAL_JSON =
   '{"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0,"ingredients":[{"name":"","grams":0}]}';
 
@@ -63,20 +79,6 @@ function describeFixed(meal: Meal): string {
   );
 }
 
-// One line per day: which slots the user pinned and which to generate.
-function daySpec(day: DayName, pinned: PinnedDay | undefined): string {
-  const free = freeSlots(pinned);
-  const fixed = MEAL_SLOTS.filter((s) => pinned?.[s]).map((s) => `${s} ${describeFixed(pinned![s]!)}`);
-  if (free.length === 0) {
-    return `- ${day}: all three meals are fixed by the user (${fixed.join('; ')}). Return "meals": {} for this day.`;
-  }
-  if (fixed.length === 0) return `- ${day}: generate breakfast, lunch, dinner.`;
-  return (
-    `- ${day}: fixed by the user: ${fixed.join('; ')}. Generate ${free.join(', ')} so the day ` +
-    `total including the fixed meals lands within ±10% of the target.`
-  );
-}
-
 function mealsJson(free: MealSlot[]): string {
   return `{${free.map((s) => `"${s}":<meal>`).join(',')}}`;
 }
@@ -89,28 +91,6 @@ function profileContext(profile: Profile): string {
   return (
     `Use mostly these ingredients the user already has: ${ingredients} (fill gaps with common groceries). ` +
     `Strictly respect these dietary restrictions: ${tags}. Goal: ${profile.goal}. `
-  );
-}
-
-function userPrompt(
-  profile: Profile,
-  days: DayName[],
-  locale: Locale,
-  pinnedByIndex: (PinnedDay | undefined)[]
-): string {
-  const specs = days.map((d, i) => daySpec(d, pinnedByIndex[i])).join('\n');
-  const example = days
-    .map((d, i) => `{"day":"${d}","meals":${mealsJson(freeSlots(pinnedByIndex[i]))}}`)
-    .join(',');
-  return (
-    LANGUAGE_RULE[locale] +
-    `Create a 7-day meal plan starting on ${days[0]} (7 consecutive days: ${days[0]} through ${days[6]}), ` +
-    `3 meals per day (breakfast, lunch, dinner), targeting ${profile.calorieTarget} kcal/day (each day within ±10%). ` +
-    profileContext(profile) +
-    `Some slots already hold the user's own dishes; never change or repeat them, and generate only the requested slots:\n${specs}\n` +
-    MEAL_FIELDS_RULE +
-    `Return JSON with exactly 7 day objects in this order and only the requested meal keys per day, ` +
-    `matching exactly: {"days":[${example}]} where <meal> is ${MEAL_JSON}`
   );
 }
 
@@ -214,27 +194,9 @@ async function completeJson<S extends z.ZodTypeAny>(
 type ModelMeals = Partial<Record<MealSlot, ModelMeal>>;
 type ModelWeekOut = { days: { meals: ModelMeals }[] };
 
-const ModelMealsSchema = z.object({
-  breakfast: ModelMealSchema.optional(),
-  lunch: ModelMealSchema.optional(),
-  dinner: ModelMealSchema.optional(),
-});
+const ModelMealsSchema = z.partialRecord(MealSlotSchema, ModelMealSchema);
 
 // Every free slot must be present; pinned slots may be omitted (or ignored).
-function weekSchema(free: MealSlot[][]) {
-  return z
-    .object({ days: z.array(z.object({ meals: ModelMealsSchema })).length(7) })
-    .superRefine((plan, ctx) => {
-      plan.days.forEach((day, i) => {
-        for (const slot of free[i]) {
-          if (!day.meals[slot]) {
-            ctx.addIssue({ code: 'custom', path: ['days', i, 'meals', slot], message: `missing ${slot}` });
-          }
-        }
-      });
-    });
-}
-
 function daySchema(free: MealSlot[]) {
   return z.object({ meals: ModelMealsSchema }).superRefine((day, ctx) => {
     for (const slot of free) {
@@ -249,10 +211,11 @@ function daySchema(free: MealSlot[]) {
 function mergeMeals(
   dayName: DayName,
   generated: ModelMeals,
-  pinned: PinnedDay | undefined
+  pinned: PinnedDay | undefined,
+  slots: MealSlot[]
 ): DayPlan['meals'] {
-  const meals = {} as DayPlan['meals'];
-  for (const slot of MEAL_SLOTS) {
+  const meals: DayPlan['meals'] = {};
+  for (const slot of slots) {
     const fixed = pinned?.[slot];
     if (fixed) {
       meals[slot] = fixed;
@@ -271,17 +234,17 @@ function mergeMeals(
 export function normalizePlan(
   plan: ModelWeekOut,
   startDate: string,
-  pinned: PinnedWeek = {}
+  pinned: PinnedWeek = {},
+  slots: MealSlot[] = DEFAULT_MEAL_SLOTS
 ): MealPlan {
-  const startIdx = DAY_NAMES.indexOf(weekdayName(parseDateKey(startDate)));
   return {
     generatedAt: new Date().toISOString(),
     startDate,
     days: plan.days.map((day, i) => {
-      const name = DAY_NAMES[(startIdx + i) % 7];
+      const name = planDayNames(startDate, plan.days.length)[i];
       return withDayTotals({
         day: name,
-        meals: mergeMeals(name, day.meals, pinned[name]),
+        meals: mergeMeals(name, day.meals, pinned[name], slots),
         total_kcal: 0,
       });
     }),
@@ -341,61 +304,154 @@ export async function parseFridgeImage(imageDataUrl: string, locale: Locale): Pr
   return [...new Set(result.data.items.map((s) => s.toLowerCase().trim()).filter(Boolean))];
 }
 
-// `startDate` is the local date key ("YYYY-MM-DD") of the plan's first day.
-// `pinned` holds the user's dishes per day name; only the other slots are
-// generated, and a fully pinned week never calls the model.
-export async function generateMealPlan(
-  profile: Profile,
-  startDate: string,
-  locale: Locale,
-  pinned: PinnedWeek = {}
-): Promise<MealPlan> {
+// Day names of a plan of `count` days starting on `startDate`.
+export function planDayNames(startDate: string, count: number): DayName[] {
   const startIdx = DAY_NAMES.indexOf(weekdayName(parseDateKey(startDate)));
-  const days = Array.from({ length: 7 }, (_, i) => DAY_NAMES[(startIdx + i) % 7]);
-  const pinnedByIndex = days.map((d) => pinned[d]);
-  const free = pinnedByIndex.map(freeSlots);
-
-  if (free.every((f) => f.length === 0)) {
-    return normalizePlan({ days: days.map(() => ({ meals: {} })) }, startDate, pinned);
-  }
-
-  const plan = await completeJson(weekSchema(free), [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: userPrompt(profile, days, locale, pinnedByIndex) },
-  ]);
-  return normalizePlan(plan, startDate, pinned);
+  return Array.from({ length: count }, (_, i) => DAY_NAMES[(startIdx + i) % 7]);
 }
 
-function dayPrompt(
-  profile: Profile,
-  plan: MealPlan,
-  dayIndex: number,
-  locale: Locale,
-  pinnedDay: PinnedDay,
-  preference?: string
-): string {
-  const day = plan.days[dayIndex].day;
-  const free = freeSlots(pinnedDay);
-  const fixed = MEAL_SLOTS.filter((s) => pinnedDay[s]).map((s) => `${s} ${describeFixed(pinnedDay[s]!)}`);
-  const otherMeals = plan.days
-    .filter((_, i) => i !== dayIndex)
-    .flatMap((d) => [d.meals.breakfast.name, d.meals.lunch.name, d.meals.dinner.name]);
+// Meal names already in the plan, so the next day doesn't repeat them.
+function planMealNames(days: DayPlan[], skipIndex = -1): string[] {
+  return days
+    .filter((_, i) => i !== skipIndex)
+    .flatMap((d) => daySlots(d).map((slot) => d.meals[slot]!.name));
+}
+
+const SNACK_RULE =
+  'Snacks are small and need no cooking: roughly 10-15% of the day\'s calories each. ';
+
+function dayPrompt(opts: {
+  profile: Profile;
+  day: DayName;
+  slots: MealSlot[];
+  pinnedDay: PinnedDay;
+  locale: Locale;
+  avoid: string[];
+  preference?: string;
+}): string {
+  const { profile, day, slots, pinnedDay, locale, avoid, preference } = opts;
+  const free = freeSlots(pinnedDay, slots);
+  const fixed = slots.filter((s) => pinnedDay[s]).map((s) => `${s} ${describeFixed(pinnedDay[s]!)}`);
   return (
     LANGUAGE_RULE[locale] +
-    `Create a fresh one-day meal plan for ${day} to replace the current one. ` +
+    `Create the meals for ${day} of a meal plan. ` +
     (fixed.length
       ? `These meals are the user's own dishes and stay as they are: ${fixed.join('; ')}. ` +
-        `Generate only ${free.join(', ')} so the day total including the fixed meals is ` +
+        `Generate only ${slotList(free)} so the day total including the fixed meals is ` +
         `${profile.calorieTarget} kcal (within ±10%). `
-      : `3 meals (breakfast, lunch, dinner), targeting ${profile.calorieTarget} kcal total (within ±10%). `) +
+      : `Generate ${slotList(free)}, targeting ${profile.calorieTarget} kcal for the whole day (within ±10%). `) +
+    (free.some((s) => s.endsWith('snack')) ? SNACK_RULE : '') +
     (preference
       ? `The user's wish for this day: "${preference}". Honor it unless it conflicts with the dietary restrictions. `
       : '') +
     profileContext(profile) +
-    `Avoid repeating meals already planned this week: ${otherMeals.join(', ')}. ` +
+    (avoid.length ? `Avoid repeating meals already planned this week: ${avoid.join(', ')}. ` : '') +
     MEAL_FIELDS_RULE +
     `Return JSON matching exactly: {"meals":${mealsJson(free)}} where <meal> is ${MEAL_JSON}`
   );
+}
+
+// Model output within ±10% is what the prompt asks for; retry only on a real
+// miss, so one sloppy answer does not cost every day a second call.
+const KCAL_TOLERANCE = 0.15;
+
+function offTarget(day: DayPlan, target: number): boolean {
+  return Math.abs(day.total_kcal - target) > target * KCAL_TOLERANCE;
+}
+
+// One day at a time: each call is small and fast, which is what lets the
+// plan route stream days to the client as they land.
+export async function generatePlanDay(opts: {
+  profile: Profile;
+  day: DayName;
+  slots: MealSlot[];
+  locale: Locale;
+  pinnedDay?: PinnedDay;
+  avoid?: string[];
+  preference?: string;
+}): Promise<DayPlan> {
+  const pinnedDay = opts.pinnedDay ?? {};
+  const free = freeSlots(pinnedDay, opts.slots);
+  if (free.length === 0) {
+    return withDayTotals({
+      day: opts.day,
+      meals: mergeMeals(opts.day, {}, pinnedDay, opts.slots),
+      total_kcal: 0,
+    });
+  }
+
+  const prompt = dayPrompt({
+    profile: opts.profile,
+    day: opts.day,
+    slots: opts.slots,
+    pinnedDay,
+    locale: opts.locale,
+    avoid: opts.avoid ?? [],
+    preference: opts.preference,
+  });
+
+  const build = async (messages: ChatMessage[]) => {
+    const result = await completeJson(daySchema(free), messages);
+    return withDayTotals({
+      day: opts.day,
+      meals: mergeMeals(opts.day, result.meals, pinnedDay, opts.slots),
+      total_kcal: 0,
+    });
+  };
+
+  const first = await build([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+  ]);
+  if (!offTarget(first, opts.profile.calorieTarget)) return first;
+
+  // Server-side totals say the day missed the target: say so and ask again,
+  // then keep whichever attempt came closer.
+  const second = await build([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+    { role: 'assistant', content: JSON.stringify({ meals: first.meals }) },
+    {
+      role: 'user',
+      content:
+        `That day totals ${first.total_kcal} kcal, but the target is ${opts.profile.calorieTarget} kcal. ` +
+        'Resize the portions (and swap dishes if you must) so the day lands within ±10% of the target. ' +
+        'Return the same JSON shape.',
+    },
+  ]);
+  const miss = (d: DayPlan) => Math.abs(d.total_kcal - opts.profile.calorieTarget);
+  return miss(second) < miss(first) ? second : first;
+}
+
+// `startDate` is the local date key ("YYYY-MM-DD") of the plan's first day.
+// `pinned` holds the user's dishes per day name; only the other slots are
+// generated, and a fully pinned day never calls the model. `onDay` is called
+// with each finished day so the caller can stream it out.
+export async function generateMealPlan(
+  profile: Profile,
+  startDate: string,
+  locale: Locale,
+  pinned: PinnedWeek = {},
+  onDay?: (index: number, day: DayPlan) => void | Promise<void>
+): Promise<MealPlan> {
+  const slots = profileSlots(profile);
+  const names = planDayNames(startDate, profilePlanDays(profile));
+  const days: DayPlan[] = [];
+
+  for (const [index, name] of names.entries()) {
+    const day = await generatePlanDay({
+      profile,
+      day: name,
+      slots,
+      locale,
+      pinnedDay: pinned[name],
+      avoid: planMealNames(days),
+    });
+    days.push(day);
+    await onDay?.(index, day);
+  }
+
+  return { generatedAt: new Date().toISOString(), startDate, days };
 }
 
 // Regenerate a single day of an existing plan. The rest of the plan is kept
@@ -410,22 +466,101 @@ export async function regenerateMealPlanDay(
   pinnedDay: PinnedDay = {},
   preference?: string
 ): Promise<MealPlan> {
-  const free = freeSlots(pinnedDay);
-  let generated: ModelMeals = {};
-  if (free.length > 0) {
-    const result = await completeJson(daySchema(free), [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: dayPrompt(profile, plan, dayIndex, locale, pinnedDay, preference) },
-    ]);
-    generated = result.meals;
-  }
-  const name = plan.days[dayIndex].day;
-  const day = withDayTotals({
-    day: name,
-    meals: mergeMeals(name, generated, pinnedDay),
-    total_kcal: 0,
+  const current = plan.days[dayIndex];
+  // Keep the day's own shape: an old 3-meal plan is not silently reshaped
+  // by a later change to the profile's slots.
+  const slots = daySlots(current).length ? daySlots(current) : profileSlots(profile);
+  const day = await generatePlanDay({
+    profile,
+    day: current.day,
+    slots,
+    locale,
+    pinnedDay,
+    // Including the day being replaced: repeating it is the failure mode.
+    avoid: planMealNames(plan.days),
+    preference,
   });
   return { ...plan, days: plan.days.map((d, i) => (i === dayIndex ? day : d)) };
+}
+
+function mealPrompt(
+  profile: Profile,
+  plan: MealPlan,
+  dayIndex: number,
+  slot: MealSlot,
+  locale: Locale,
+  preference?: string
+): string {
+  const day = plan.days[dayIndex];
+  const others = daySlots(day).filter((s) => s !== slot);
+  const otherKcal = others.reduce((sum, s) => sum + day.meals[s]!.kcal, 0);
+  const budget = Math.max(100, profile.calorieTarget - otherKcal);
+  const current = day.meals[slot];
+  return (
+    LANGUAGE_RULE[locale] +
+    `Replace only the ${slot} (${SLOT_LABELS[slot]}) of ${day.day} in a meal plan with a different meal. ` +
+    (current ? `The meal being replaced is "${current.name}" — propose something clearly different. ` : '') +
+    (others.length
+      ? `The rest of that day stays: ${others.map((s) => `${s} ${describeFixed(day.meals[s]!)}`).join('; ')}. `
+      : '') +
+    `The new meal should be about ${budget} kcal so the day lands near the ${profile.calorieTarget} kcal target. ` +
+    (slot.endsWith('snack') ? SNACK_RULE : '') +
+    (preference
+      ? `The user's wish: "${preference}". Honor it unless it conflicts with the dietary restrictions. `
+      : '') +
+    profileContext(profile) +
+    `Avoid repeating meals already planned this week: ${planMealNames(plan.days).join(', ')}. ` +
+    MEAL_FIELDS_RULE +
+    `Return JSON matching exactly: {"meals":${mealsJson([slot])}} where <meal> is ${MEAL_JSON}`
+  );
+}
+
+const sameName = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+// Regenerate one slot of one day, leaving the other meals of that day alone.
+export async function regenerateMeal(
+  profile: Profile,
+  plan: MealPlan,
+  dayIndex: number,
+  slot: MealSlot,
+  locale: Locale,
+  preference?: string
+): Promise<MealPlan> {
+  const previous = plan.days[dayIndex].meals[slot]?.name ?? '';
+  const prompt = mealPrompt(profile, plan, dayIndex, slot, locale, preference);
+  const ask = async (messages: ChatMessage[]) => {
+    const result = await completeJson(daySchema([slot]), messages);
+    const out = result.meals[slot];
+    if (!out) throw new GenerationFailedError(`missing ${slot}`);
+    return out;
+  };
+
+  let meal = await ask([
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: prompt },
+  ]);
+  // "Replace this meal" that returns the same meal is a failed swap, so say
+  // it plainly and ask once more.
+  if (previous && sameName(meal.name, previous)) {
+    meal = await ask([
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: JSON.stringify({ meals: { [slot]: meal } }) },
+      {
+        role: 'user',
+        content:
+          `"${previous}" is the meal being replaced — returning it again is not a replacement. ` +
+          'Return a different dish, with a different main ingredient. Same JSON shape.',
+      },
+    ]);
+  }
+  return {
+    ...plan,
+    days: plan.days.map((d, i) =>
+      i === dayIndex ? withDayTotals({ ...d, meals: { ...d.meals, [slot]: normalizeMeal(meal) } }) : d
+    ),
+  };
 }
 
 // kcal and macros of a whole dish from its ingredient list (the user can

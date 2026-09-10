@@ -3,18 +3,28 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SilpoCart } from '@/components/dashboard/SilpoCart';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { useOrders } from '@/hooks/useOrders';
+import { usePantry } from '@/hooks/usePantry';
+import { replenishPantry } from '@/lib/pantry';
 import { PENDING_CART_KEY } from '@/lib/stores';
-import type { OrderItem } from '@/lib/schemas';
+import type { OrderItem, PantryItem } from '@/lib/schemas';
 
 export default function CartPage() {
   const { t } = useI18n();
   const { profile } = useSession();
   const { placeOrder } = useOrders();
+  const { pantry, saving, save } = usePantry();
   const toast = useToast();
+  // Offered once the cart is written: what was just bought is now at home.
+  // Holds the committed lines, not the original request — unmatched and
+  // excluded rows never reach the pantry. `key` identifies one commit so the
+  // same groceries cannot be counted into the pantry twice.
+  const [purchase, setPurchase] = useState<{ key: string; items: PantryItem[] } | null>(null);
+  const [imported, setImported] = useState<string[]>([]);
   // undefined = still reading storage; null = nothing handed off.
   const [items, setItems] = useState<OrderItem[] | null | undefined>(undefined);
 
@@ -48,7 +58,42 @@ export default function CartPage() {
       </div>
 
       {items ? (
-        <SilpoCart items={items} onCommitted={() => placeOrder(items).catch(() => {})} />
+        <>
+          <SilpoCart
+            items={items}
+            onCommitted={(result, bought) => {
+              const key = `${result.cartId}:${bought
+                .map((i) => `${i.name}=${i.amount ?? ''}${i.unit ?? ''}`)
+                .join('|')}`;
+              setPurchase(bought.length > 0 ? { key, items: bought } : null);
+              placeOrder(items).catch(() => {});
+            }}
+          />
+          {purchase && !imported.includes(purchase.key) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-ink bg-peach px-4 py-3 text-sm font-semibold">
+              <span>
+                <span aria-hidden="true">🧊 </span>
+                {t.pantry.subtitle}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={saving}
+                onClick={async () => {
+                  try {
+                    await save(replenishPantry(pantry, purchase.items));
+                    setImported((prev) => [...prev, purchase.key]);
+                    setPurchase(null);
+                    toast(t.pantry.fromCartDone);
+                  } catch {
+                    toast(t.pantry.saveFailed);
+                  }
+                }}
+              >
+                {t.pantry.fromCart}
+              </Button>
+            </div>
+          )}
+        </>
       ) : items === null ? (
         <div className="rounded-3xl border-2 border-dashed border-sand py-12 text-center">
           <p className="text-3xl" aria-hidden="true">

@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
 import type { Dict } from '@/lib/i18n';
 import { formatWeight } from '@/lib/shopping';
+import { purchasedPantryItem } from '@/lib/silpo/packSize';
 import type {
   OrderItem,
+  PantryItem,
   SilpoCart as SilpoCartData,
   SilpoCartLine,
   SilpoCommitResult,
@@ -83,7 +85,10 @@ export function SilpoCart({
   onCommitted,
 }: {
   items: OrderItem[];
-  onCommitted?: (result: SilpoCommitResult) => void;
+  // `purchased` is what the cart really took: matched products only, at the
+  // quantities the user settled on. Empty when Silpo reported a product-level
+  // error, because an accepted write is not proof the quantity was available.
+  onCommitted?: (result: SilpoCommitResult, purchased: PantryItem[]) => void;
 }) {
   const { t } = useI18n();
   const s = t.silpo;
@@ -126,14 +131,13 @@ export function SilpoCart({
   const commit = async () => {
     if (state.phase !== 'review') return;
     const { cart, quantities } = state;
-    const lines = cart.lines
-      .filter((l) => l.product && (quantities[l.query] ?? 0) > 0)
-      .map((l) => ({
-        productId: l.product!.productId,
-        companyId: l.product!.companyId,
-        branchId: l.product!.branchId,
-        quantity: quantities[l.query],
-      }));
+    const committed = cart.lines.filter((l) => l.product && (quantities[l.query] ?? 0) > 0);
+    const lines = committed.map((l) => ({
+      productId: l.product!.productId,
+      companyId: l.product!.companyId,
+      branchId: l.product!.branchId,
+      quantity: quantities[l.query],
+    }));
     if (lines.length === 0) return;
     setState({ ...state, committing: true, commitError: undefined });
     try {
@@ -143,7 +147,18 @@ export function SilpoCart({
         lines,
       });
       setState({ phase: 'committed', cart, quantities, result });
-      onCommitted?.(result);
+      // Silpo answers 200 even when a line could not be honoured in full
+      // (`product.offer.stock.max` and friends), so an error-level validation
+      // means we do not know what was actually reserved.
+      const rejected = result.validations.some((v) => v.level === 'error');
+      onCommitted?.(
+        result,
+        rejected
+          ? []
+          : committed.map((l) =>
+              purchasedPantryItem(l.query, l.product!, quantities[l.query])
+            )
+      );
     } catch (e) {
       const err = e instanceof CartError ? e : new CartError('error');
       if (err.kind === 'unlinked') setState({ phase: 'unlinked' });
@@ -225,7 +240,7 @@ export function SilpoCart({
 
 function Notice({ title, body, children }: { title: string; body: string; children: React.ReactNode }) {
   return (
-    <div className="mt-4 rounded-xl border-2 border-sand bg-white p-4 text-center">
+    <div className="mt-4 rounded-xl border-2 border-sand bg-paper p-4 text-center">
       <p className="font-semibold text-ink">{title}</p>
       <p className="mx-auto mt-1 max-w-md text-sm text-latte">{body}</p>
       <div className="mt-3">{children}</div>
@@ -238,7 +253,7 @@ function LoadingRows({ items }: { items: OrderItem[] }) {
   return (
     <ul className="mt-4 flex flex-col gap-2">
       {items.slice(0, 6).map((it) => (
-        <li key={it.name} className="flex items-center gap-3 rounded-xl border-2 border-sand bg-white p-2.5">
+        <li key={it.name} className="flex items-center gap-3 rounded-xl border-2 border-sand bg-paper p-2.5">
           <span className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-sand" />
           <span className="h-3 flex-1 animate-pulse rounded bg-sand" />
         </li>
@@ -288,7 +303,7 @@ function ReviewBody({
         )}
       </ul>
 
-      <div className="mt-4 rounded-xl border-2 border-sand bg-white p-3 text-xs font-semibold text-latte">
+      <div className="mt-4 rounded-xl border-2 border-sand bg-paper p-3 text-xs font-semibold text-latte">
         <p>
           {s.delivery(formatSlot(t, cart.timeslot.start, cart.timeslot.end))}
           {cart.delivery.deliveryCost !== null && s.deliveryCost(uah(cart.delivery.deliveryCost))}
@@ -299,7 +314,7 @@ function ReviewBody({
       </div>
 
       {commitError && (
-        <p className="mt-3 rounded-xl border-2 border-tomato bg-white p-3 text-sm font-semibold text-tomato">
+        <p className="mt-3 rounded-xl border-2 border-tomato bg-paper p-3 text-sm font-semibold text-tomato">
           {commitError}
         </p>
       )}
@@ -330,7 +345,7 @@ function MatchedRow({
   const left = quantity <= 0;
   return (
     <li
-      className={`relative flex items-center gap-3 rounded-xl border-2 bg-white p-2.5 ${p.weighted ? 'pr-7' : ''} ${left ? 'border-dashed border-sand opacity-60' : 'border-sand'}`}
+      className={`relative flex items-center gap-3 rounded-xl border-2 bg-paper p-2.5 ${p.weighted ? 'pr-7' : ''} ${left ? 'border-dashed border-sand opacity-60' : 'border-sand'}`}
     >
       {p.img ? (
         <Image src={p.img} alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-lg object-cover" unoptimized />
@@ -406,7 +421,7 @@ function StepHint({ step }: { step: number }) {
       <span
         id={id}
         role="tooltip"
-        className={`absolute right-0 top-full z-20 mt-1.5 w-64 rounded-xl border-2 border-ink bg-white p-3 text-left text-xs font-semibold leading-snug text-ink shadow-[4px_4px_0_var(--color-ink)] group-hover:block group-focus-within:block ${open ? 'block' : 'hidden'}`}
+        className={`absolute right-0 top-full z-20 mt-1.5 w-64 rounded-xl border-2 border-ink bg-paper p-3 text-left text-xs font-semibold leading-snug text-ink shadow-[4px_4px_0_var(--color-ink)] group-hover:block group-focus-within:block ${open ? 'block' : 'hidden'}`}
       >
         {t.silpo.stepHint(step)}
       </span>
@@ -440,7 +455,7 @@ function Stepper({
 function UnmatchedRow({ line }: { line: SilpoCartLine }) {
   const { t } = useI18n();
   return (
-    <li className="flex items-center gap-3 rounded-xl border-2 border-dashed border-sand bg-white/60 p-2.5">
+    <li className="flex items-center gap-3 rounded-xl border-2 border-dashed border-sand bg-paper/60 p-2.5">
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-sand/50 text-xl">🔍</span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold capitalize text-ink">{line.query}</p>
@@ -480,7 +495,7 @@ function CommittedBody({ result, onEdit }: { result: SilpoCommitResult; onEdit: 
       )}
 
       {result.loyalty?.isEnabled && result.loyalty.bonusAvailable > 0 && (
-        <p className="mt-4 rounded-xl border-2 border-sand bg-white p-3 text-sm font-semibold text-ink">
+        <p className="mt-4 rounded-xl border-2 border-sand bg-paper p-3 text-sm font-semibold text-ink">
           {s.bonuses(result.loyalty.bonusAvailable)}
         </p>
       )}
@@ -522,7 +537,7 @@ function ValidationRow({ v }: { v: SilpoValidation }) {
   const error = v.level === 'error';
   return (
     <li
-      className={`rounded-xl border-2 bg-white p-3 text-sm font-semibold ${error ? 'border-tomato text-tomato' : 'border-sand text-ink'}`}
+      className={`rounded-xl border-2 bg-paper p-3 text-sm font-semibold ${error ? 'border-tomato text-tomato' : 'border-sand text-ink'}`}
     >
       {error ? '⚠️ ' : 'ℹ️ '}
       {t.silpo.validations[v.message] ?? v.message}

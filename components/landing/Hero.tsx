@@ -177,7 +177,7 @@ export function Hero({ onCta }: { onCta: () => void }) {
             style={{ '--d': '1s' } as CSSProperties}
           >
             <div
-              className="anim-float rotate-3 rounded-2xl border-2 border-ink bg-white px-4 py-2.5"
+              className="anim-float rotate-3 rounded-2xl border-2 border-ink bg-paper px-4 py-2.5"
               style={{ '--d': '0.7s' } as CSSProperties}
             >
               <p className="text-[13px] font-bold">{hero.sticker}</p>

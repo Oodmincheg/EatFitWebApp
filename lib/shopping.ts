@@ -1,4 +1,11 @@
-import type { MealPlan, ShoppingCategory, ShoppingItem } from './schemas';
+import {
+  daySlots,
+  pantryGrams,
+  type MealPlan,
+  type PantryItem,
+  type ShoppingCategory,
+  type ShoppingItem,
+} from './schemas';
 
 // Naive by design (spec §5.4.1) — good enough for the demo; no NLP.
 // Ingredient names arrive in the plan's language (English or Ukrainian), and
@@ -28,15 +35,16 @@ export function stem(s: string): string {
   return s;
 }
 
-// Owned if, after normalization and stemming, either string contains the other.
-export function isOwned(ingredient: string, owned: string[]): boolean {
+// Matched if, after normalization and stemming, either string contains the other.
+export function namesMatch(ingredient: string, ownedName: string): boolean {
   const ing = stem(normalize(ingredient));
-  if (!ing) return false;
-  return owned.some((o) => {
-    const own = stem(normalize(o));
-    if (!own) return false;
-    return ing.includes(own) || own.includes(ing);
-  });
+  const own = stem(normalize(ownedName));
+  if (!ing || !own) return false;
+  return ing.includes(own) || own.includes(ing);
+}
+
+export function isOwned(ingredient: string, owned: string[]): boolean {
+  return owned.some((o) => namesMatch(ingredient, o));
 }
 
 export function parseOwnedIngredients(raw: string): string[] {
@@ -144,31 +152,57 @@ export function categorize(name: string): ShoppingCategory {
   return 'other';
 }
 
-export function shoppingList(plan: MealPlan, ownedRaw: string): ShoppingItem[] {
-  const owned = parseOwnedIngredients(ownedRaw);
+// The week's ingredients minus what the pantry covers. A pantry row without
+// a weight — or one counted in pieces — means "enough of it" (the old
+// free-text behaviour); a row with a weight only covers that much, and each
+// gram is spent once even when several ingredients match the same row.
+export function shoppingList(plan: MealPlan, pantry: PantryItem[]): ShoppingItem[] {
   const items = new Map<string, { grams: number; usedIn: Set<string> }>();
 
   for (const day of plan.days) {
-    for (const meal of Object.values(day.meals)) {
-      for (const ingredient of meal.ingredients) {
+    for (const slot of daySlots(day)) {
+      for (const ingredient of day.meals[slot]!.ingredients) {
         const name = normalize(ingredient.name);
-        if (!name || isOwned(name, owned)) continue;
+        if (!name) continue;
         if (!items.has(name)) items.set(name, { grams: 0, usedIn: new Set() });
         const item = items.get(name)!;
         item.grams += ingredient.grams;
-        item.usedIn.add(meal.name);
+        item.usedIn.add(day.meals[slot]!.name);
       }
     }
   }
 
-  return [...items.entries()]
-    .map(([name, { grams, usedIn }]) => ({
+  // `remaining` is null for rows that cover an item outright; the rest is
+  // drawn down as ingredients claim it, in name order so the result is stable.
+  const stock = pantry.map((row) => ({ name: row.name, remaining: pantryGrams(row) }));
+  const out: ShoppingItem[] = [];
+
+  for (const [name, { grams, usedIn }] of [...items.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const matches = stock.filter((row) => namesMatch(name, row.name));
+    const covered = matches.some((row) => row.remaining === null);
+    if (matches.length > 0 && (covered || grams <= 0)) continue;
+
+    let have = 0;
+    for (const row of matches) {
+      if (have >= grams) break;
+      const take = Math.min(row.remaining ?? 0, grams - have);
+      row.remaining = (row.remaining ?? 0) - take;
+      have += take;
+    }
+    if (matches.length > 0 && have >= grams) continue;
+
+    out.push({
       name,
-      grams,
+      grams: Math.round(grams - have),
+      ...(have > 0 ? { haveGrams: Math.round(have) } : {}),
       usedIn: [...usedIn],
       category: categorize(name),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    });
+  }
+
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export type WeightUnits = { g: string; kg: string };

@@ -12,9 +12,11 @@ import {
   type Order,
   type OrderItem,
   type OrderStatus,
+  type PantryItem,
   type Pins,
   type Profile,
 } from '../schemas';
+import { coerceProfile, pantryToIngredients } from '../profile';
 
 // users collection — _id is the mp_uid cookie value
 export interface UserDoc {
@@ -76,7 +78,8 @@ async function dishes() {
 }
 
 export async function findUser(uid: string): Promise<UserDoc | null> {
-  return (await users()).findOne({ _id: uid });
+  const user = await (await users()).findOne({ _id: uid });
+  return user?.profile ? { ...user, profile: coerceProfile(user.profile) } : user;
 }
 
 export async function createGuestUser(): Promise<UserDoc> {
@@ -136,6 +139,17 @@ export async function upsertProfile(uid: string, profile: Profile): Promise<bool
   return res.matchedCount > 0;
 }
 
+// Pantry edits must not touch `createdAt` — that timestamp is what marks a
+// plan as generated under older settings.
+export async function updatePantry(uid: string, pantry: PantryItem[]): Promise<Profile | null> {
+  const doc = await (await users()).findOneAndUpdate(
+    { _id: uid, profile: { $exists: true } },
+    { $set: { 'profile.pantry': pantry, 'profile.ingredients': pantryToIngredients(pantry) } },
+    { returnDocument: 'after' }
+  );
+  return doc?.profile ? coerceProfile(doc.profile) : null;
+}
+
 export async function latestPlan(uid: string): Promise<MealPlan | null> {
   const doc = await (await plans())
     .find({ userId: uid })
@@ -152,6 +166,20 @@ export async function insertPlan(uid: string, plan: MealPlan): Promise<void> {
     plan,
     generatedAt: plan.generatedAt,
   });
+}
+
+// Progressive generation writes the plan after every finished day, so a run
+// that dies halfway still leaves the user with the days it managed.
+export async function savePlanDoc(
+  uid: string,
+  planId: ObjectId,
+  plan: MealPlan
+): Promise<void> {
+  await (await plans()).updateOne(
+    { _id: planId },
+    { $set: { userId: uid, plan, generatedAt: plan.generatedAt } },
+    { upsert: true }
+  );
 }
 
 // Overwrite the current (latest) plan in place — used by single-day

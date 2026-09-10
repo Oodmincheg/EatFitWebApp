@@ -7,7 +7,7 @@ import {
   parseOwnedIngredients,
   shoppingList,
 } from './shopping';
-import type { Ingredient, MealPlan } from './schemas';
+import type { Ingredient, MealPlan, PantryItem } from './schemas';
 
 describe('normalize', () => {
   it('lowercases, trims, strips trailing punctuation', () => {
@@ -74,30 +74,89 @@ describe('shoppingList', () => {
     'Buckwheat dinner': [g('buckwheat', 90), g('salmon', 140)],
   });
 
+  const pantry = (raw: string): PantryItem[] =>
+    parseOwnedIngredients(raw).map((name) => ({ name }));
+
   it('excludes owned ingredients (containment + plural rules)', () => {
-    const items = shoppingList(plan, 'chicken, buckwheat, eggs, tomato');
+    const items = shoppingList(plan, pantry('chicken, buckwheat, eggs, tomato'));
     const names = items.map((i) => i.name);
     expect(names).toEqual(['broccoli', 'milk', 'rice', 'salmon']);
   });
 
+  it('a weighed pantry row only covers its own weight', () => {
+    // rice needed: 80 g × 7 days = 560 g
+    const items = shoppingList(plan, [{ name: 'rice', grams: 200 }]);
+    const rice = items.find((i) => i.name === 'rice');
+    expect(rice?.grams).toBe(360);
+    expect(rice?.haveGrams).toBe(200);
+  });
+
+  it('a weighed pantry row that covers the week drops the item', () => {
+    const items = shoppingList(plan, [{ name: 'rice', grams: 600 }]);
+    expect(items.find((i) => i.name === 'rice')).toBeUndefined();
+  });
+
+  it('a pantry row without a weight still covers the item entirely', () => {
+    const items = shoppingList(plan, [{ name: 'rice' }]);
+    expect(items.find((i) => i.name === 'rice')).toBeUndefined();
+  });
+
+  it('converts kilograms and litres to grams before subtracting', () => {
+    // rice needed: 560 g
+    expect(
+      shoppingList(plan, [{ name: 'rice', amount: 1, unit: 'kg' }]).find((i) => i.name === 'rice')
+    ).toBeUndefined();
+    const partial = shoppingList(plan, [{ name: 'rice', amount: 0.2, unit: 'kg' }]);
+    expect(partial.find((i) => i.name === 'rice')?.grams).toBe(360);
+    // millilitres count as grams
+    const milk = shoppingList(plan, [{ name: 'milk', amount: 0.2, unit: 'l' }]);
+    expect(milk.find((i) => i.name === 'milk')?.grams).toBe(150); // 50 g x 7 - 200
+  });
+
+  it('an amount in pieces says nothing about weight, so it covers the item', () => {
+    const items = shoppingList(plan, [{ name: 'eggs', amount: 10, unit: 'pc' }]);
+    expect(items.find((i) => i.name === 'eggs')).toBeUndefined();
+  });
+
+  it('spends each pantry gram once across ingredients that match it', () => {
+    // Both requirements match the single "milk" row; 50 g x 7 days each.
+    const twoMilks = planWith({
+      'Milk bowl': [g('milk', 50)],
+      'Skimmed bowl': [g('skimmed milk', 50)],
+      Toast: [g('bread', 40)],
+    });
+    const items = shoppingList(twoMilks, [{ name: 'milk', amount: 350, unit: 'g' }]);
+    const names = items.map((i) => i.name);
+    // 700 g needed in total, 350 g at home: one of the two is still on the list.
+    expect(names).toContain('bread');
+    const milkRows = items.filter((i) => i.name.includes('milk'));
+    expect(milkRows).toHaveLength(1);
+    expect(milkRows[0].grams).toBe(350);
+  });
+
+  it('reads the weight of rows written before units existed', () => {
+    const items = shoppingList(plan, [{ name: 'rice', grams: 200 }]);
+    expect(items.find((i) => i.name === 'rice')?.grams).toBe(360);
+  });
+
   it('is sorted alphabetically with usedIn meal names', () => {
-    const items = shoppingList(plan, '');
+    const items = shoppingList(plan, []);
     expect(items.map((i) => i.name)).toEqual([...items.map((i) => i.name)].sort());
     const rice = items.find((i) => i.name === 'rice');
     expect(rice?.usedIn).toContain('Chicken bowl');
   });
 
   it('dedupes ingredients across days', () => {
-    const items = shoppingList(plan, '');
+    const items = shoppingList(plan, []);
     expect(items.filter((i) => i.name === 'rice')).toHaveLength(1);
   });
 
   it('empty owned list buys everything', () => {
-    expect(shoppingList(plan, '').length).toBe(8);
+    expect(shoppingList(plan, []).length).toBe(8);
   });
 
   it('sums weights across the week', () => {
-    const items = shoppingList(plan, '');
+    const items = shoppingList(plan, []);
     // each meal appears once per day × 7 days (see planWith); rice = 80 g × 7
     const rice = items.find((i) => i.name === 'rice');
     expect(rice?.grams).toBe(560);

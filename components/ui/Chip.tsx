@@ -14,7 +14,7 @@ export function Chip({
     'inline-flex items-center rounded-full border-2 border-ink px-3.5 py-1.5 text-sm transition-colors';
   const look = selected
     ? 'bg-peach font-bold text-tomato'
-    : 'bg-white font-semibold text-ink' + (interactive ? ' hover:bg-cream' : '');
+    : 'bg-paper font-semibold text-ink' + (interactive ? ' hover:bg-cream' : '');
   if (!interactive) {
     return <span className={`${base} ${look}`}>{label}</span>;
   }

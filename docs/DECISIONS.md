@@ -93,6 +93,91 @@ The owner's `~/.npmrc` routes npm to a private Artifactory; 67 lockfile entries 
 there and Vercel failed `npm install` with E401. `.npmrc` now pins `registry.npmjs.org`
 and the lockfile was rewritten (same tarballs, same integrity hashes).
 
+## 2026-09-09 · Meal slots are a per-profile list, days are a partial record
+
+Fixed breakfast/lunch/dinner ruled out snacks, which are where most people lose the
+calorie budget, and forced a seven-day horizon on users who only plan a few days ahead.
+`MEAL_SLOTS` now holds five ordered slots and the profile picks a subset (two to five);
+`DayPlan.meals` became `z.partialRecord(MealSlot, Meal)` and every consumer reads
+`daySlots(day)` instead of assuming three. Old plans parse and render unchanged, and a
+day keeps its own shape when regenerated, so changing the setting never reshapes history.
+
+## 2026-09-09 · Generate day by day and stream the days out
+
+One model call for the whole week meant 30–60 s of a skeleton, and a failure at the end
+cost the whole run. Generation is now one call per day, streamed to the client as NDJSON
+(`start` / `day` / `done` / `error`), and the plan document is written after every day —
+so a run that dies halfway leaves a shorter, valid plan instead of nothing. Costs more
+tokens than one big call and takes a similar wall-clock time; what changes is that the
+user watches the week fill in. Note for Vercel: this is a long-lived response, and Hobby
+caps function duration, so a seven-day run may need the plan-days setting lowered there.
+
+## 2026-09-09 · The pantry is structured data; `ingredients` is derived
+
+The fridge list was one free-text field editable only inside the generate dialog, so
+"I bought milk" had nowhere to go and the shopping list could not know quantities. The
+profile now carries `pantry: {name, grams?}[]` with its own page and its own route
+(`PUT /api/pantry`, which deliberately does not restamp `createdAt` and so does not mark
+the plan outdated). `profile.ingredients` is kept and derived from the pantry on every
+write, because the prompt and the owned-item matching read that one string. Rows without
+a weight behave exactly as the old list did; rows with one are subtracted from the
+shopping list instead of removing the item. Amounts carry a unit (g/kg/ml/l/pcs) and are
+converted to grams for that subtraction — millilitres count as grams, which is right for
+water-like staples and close enough for milk or oil — while a count in pieces says nothing
+about weight and so covers the item outright. The page saves as you type: an explicit save
+button left people with a pantry that looked edited while everything else still read the
+old one.
+
+## 2026-09-10 · The pantry is the only source of the fridge list
+
+The pre-generation dialog used to keep unconfirmed edits in sessionStorage so a half-typed
+list survived a reload. Once the pantry became a saved, structured list that draft only
+shadowed it: edit the pantry, open the dialog, and yesterday's text was still there. The
+draft is gone and the dialog always opens on the current pantry.
+
+## 2026-09-10 · Pantry stock is spent, not re-read
+
+Two findings had the same root: the pantry was treated as a set of facts to
+compare against rather than a stock to draw down. Several ingredients matching one
+weighed row each consumed it in full, and groceries bought through the cart were
+merged by name, so buying more of something already in the pantry changed nothing.
+The shopping list now draws each row down once, and purchases go through
+`replenishPantry`, which sums compatible units and falls back to an explicit
+"no amount" — the app's word for "enough of it" — rather than inventing a number
+when a count meets a weight. The cart hands over the lines it actually committed,
+sized from the product (kg for weighed goods, pack contents × quantity otherwise),
+so unmatched and excluded rows never reach the pantry.
+
+## 2026-09-10 · An accepted Silpo write is not proof of what was bought
+
+The cart writes through `silpo_add_or_update_cart_products`, which answers 200 and then
+reports per-line problems in `validations` — `product.offer.stock.max` means the quantity
+was trimmed. Feeding the requested quantities into the pantry after that would mark food
+as at home that nobody has. So an error-level validation blocks the pantry import
+entirely, and what does get imported is sized from the product itself: kilograms for
+weighed goods, the pack's whole stated content times the number of packs otherwise
+(`purchasedPantryItem`, sharing `parseDisplayRatio` with the matching code, which already
+understood `10шт` and `5*80г/уп`). One commit can be imported once.
+
+## 2026-09-09 · Regeneration checks its own output
+
+Two failure modes were visible as soon as the flow was used in anger: "replace this meal"
+could hand back the same meal, and a day could land far from the calorie target while the
+UI dutifully showed it. Both are now checked server-side against recomputed totals, with
+one corrective turn each — the meal swap is told the name it returned is the one being
+replaced, the day is told its total and the target — and the closer attempt wins. One
+retry only: a second call per miss is affordable, a loop is not.
+
+## 2026-09-09 · Theme through CSS variables, not a Tailwind dark: variant
+
+Every colour was already a `--color-*` token, so the cheapest dark mode was one level of
+indirection: the palette lives on `:root`, `@theme inline` maps Tailwind's names onto it,
+and `[data-theme]` plus `prefers-color-scheme` swap the values. `bg-white` became
+`bg-paper` (a themed surface) everywhere except on the tomato and lime blocks, where
+white is a fixed accent; `ink` is the foreground in both themes, hence `ink-contrast`
+for the few elements that sit on top of it. The cookie is read in the root layout, so a
+pinned theme paints on the first frame.
+
 ## Open
 
 - Real token verification for Google sign-in (`firebase-admin` or Auth.js).

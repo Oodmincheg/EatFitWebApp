@@ -73,20 +73,20 @@ describe('coerceStoredPlan', () => {
 
   it('passes macros through unchanged', () => {
     const plan = coerceStoredPlan(storedPlan(mealWithMacros));
-    expect(plan.days[0].meals.breakfast.protein_g).toBe(35);
-    expect(plan.days[0].meals.breakfast.fat_g).toBe(15);
-    expect(plan.days[0].meals.breakfast.carbs_g).toBe(55);
+    expect(plan.days[0].meals.breakfast!.protein_g).toBe(35);
+    expect(plan.days[0].meals.breakfast!.fat_g).toBe(15);
+    expect(plan.days[0].meals.breakfast!.carbs_g).toBe(55);
   });
 
   it('leaves macros absent on legacy meals instead of defaulting to 0', () => {
     const plan = coerceStoredPlan(storedPlan(legacyMeal));
-    expect('protein_g' in plan.days[0].meals.breakfast).toBe(false);
+    expect('protein_g' in plan.days[0].meals.breakfast!).toBe(false);
   });
 
   it('coerces legacy string ingredients to { name, grams: 0 }', () => {
     const plan = storedPlan(legacyMeal);
-    plan.days[0].meals.dinner.ingredients = ['eggs' as unknown as Meal['ingredients'][number]];
+    plan.days[0].meals.dinner!.ingredients = ['eggs' as unknown as Meal['ingredients'][number]];
     const coerced = coerceStoredPlan(plan);
-    expect(coerced.days[0].meals.dinner.ingredients).toEqual([{ name: 'eggs', grams: 0 }]);
+    expect(coerced.days[0].meals.dinner!.ingredients).toEqual([{ name: 'eggs', grams: 0 }]);
   });
 });

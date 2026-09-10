@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { eatenByDayName, formatDateTime, planRange } from '@/lib/dates';
+import { daySlots } from '@/lib/schemas';
 import type { DayProgress, MealPlan, MealSlot } from '@/lib/schemas';
 
 export default function HistoryPage() {
@@ -88,9 +89,10 @@ export default function HistoryPage() {
               (sum, slots) => sum + slots.length,
               0
             );
+            const mealCount = plan.days.reduce((sum, d) => sum + daySlots(d).length, 0);
             const expanded = expandedIdx === idx;
             return (
-              <li key={plan.generatedAt} className="rounded-3xl border-2 border-ink bg-white">
+              <li key={plan.generatedAt} className="rounded-3xl border-2 border-ink bg-paper">
                 <button
                   onClick={() => setExpandedIdx(expanded ? null : idx)}
                   aria-expanded={expanded}
@@ -113,7 +115,7 @@ export default function HistoryPage() {
                         profile.calorieTarget.toLocaleString(t.intl)
                       )}
                       <span className={eatenCount > 0 ? 'text-lime-deep' : undefined}>
-                        {t.history.eaten(eatenCount)}
+                        {t.history.eaten(eatenCount, mealCount)}
                       </span>
                     </span>
                   </span>

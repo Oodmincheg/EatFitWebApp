@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Button } from '@/components/ui/Button';
 import { LanguageToggle } from '@/components/ui/LanguageToggle';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Logo } from '@/components/ui/Logo';
 import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
@@ -70,6 +71,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               {t.shell.hello(displayName)}
             </span>
             <LanguageToggle />
+            <ThemeToggle />
             {user.kind === 'guest' && firebaseAvailable && (
               <Button variant="secondary" onClick={handleGoogle} disabled={authBusy}>
                 {t.shell.signInGoogle}

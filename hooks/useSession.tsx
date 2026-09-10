@@ -9,7 +9,15 @@ import {
   useState,
 } from 'react';
 import { clearUserStorage } from '@/lib/clientStorage';
-import type { MealPlan, Pins, Profile, ProfileInput, Session } from '@/lib/schemas';
+import {
+  SessionPayloadSchema,
+  type MealPlan,
+  type Pins,
+  type Profile,
+  type ProfileInput,
+  type Session,
+  type SessionPayload,
+} from '@/lib/schemas';
 
 interface SessionState {
   loading: boolean;
@@ -20,7 +28,11 @@ interface SessionState {
   startGuest: () => Promise<Session>;
   startGoogle: (idToken: string) => Promise<Session>;
   saveProfile: (input: ProfileInput) => Promise<Profile>;
+  setProfile: (profile: Profile) => void;
   setPlan: (plan: MealPlan) => void;
+  // Re-read the server's copy — used when a stream leaves the client unsure
+  // which plan is current.
+  refresh: () => Promise<void>;
   setPins: (pins: Pins) => void;
   logout: () => Promise<void>;
 }
@@ -40,19 +52,42 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [plan, setPlanState] = useState<MealPlan | null>(null);
   const [pins, setPinsState] = useState<Pins>({});
 
+  const adopt = useCallback((payload: SessionPayload) => {
+    setUser(payload.user);
+    setProfile(payload.profile);
+    setPlanState(payload.plan);
+    setPinsState(payload.pins ?? {});
+  }, []);
+
+  // Every session payload is validated before it reaches state; a malformed
+  // one leaves the session as it was rather than handing components a plan
+  // they cannot render.
+  const readPayload = useCallback(async (res: Response): Promise<SessionPayload | null> => {
+    if (!res.ok) return null;
+    const parsed = SessionPayloadSchema.safeParse(await res.json());
+    if (!parsed.success) {
+      console.error('invalid session payload', parsed.error.issues[0]);
+      return null;
+    }
+    return parsed.data;
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const payload = await readPayload(await fetch('/api/me'));
+      if (payload) adopt(payload);
+    } catch {
+      // Offline or server error — keep whatever the session already holds.
+    }
+  }, [adopt, readPayload]);
+
   // One bootstrap call on app load: cookie → user + profile + latest plan + pins.
   useEffect(() => {
     let cancelled = false;
     fetch('/api/me')
       .then(async (res) => {
-        if (cancelled) return;
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
-          setProfile(data.profile);
-          setPlanState(data.plan);
-          setPinsState(data.pins ?? {});
-        }
+        const payload = await readPayload(res);
+        if (!cancelled && payload) adopt(payload);
       })
       .catch(() => {})
       .finally(() => {
@@ -61,22 +96,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [adopt, readPayload]);
 
-  const createSession = useCallback(async (body: object): Promise<Session> => {
-    const res = await fetch('/api/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error('session_failed');
-    const data = await res.json();
-    setUser(data.user);
-    setProfile(data.profile);
-    setPlanState(data.plan ?? null);
-    setPinsState(data.pins ?? {});
-    return data.user;
-  }, []);
+  const createSession = useCallback(
+    async (body: object): Promise<Session> => {
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const payload = await readPayload(res);
+      if (!payload) throw new Error('session_failed');
+      adopt(payload);
+      return payload.user;
+    },
+    [adopt, readPayload]
+  );
 
   const startGuest = useCallback(() => createSession({}), [createSession]);
   const startGoogle = useCallback(
@@ -97,6 +132,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setPlan = useCallback((p: MealPlan) => setPlanState(p), []);
+  const setProfileValue = useCallback((p: Profile) => setProfile(p), []);
   const setPins = useCallback((p: Pins) => setPinsState(p), []);
 
   const logout = useCallback(async () => {
@@ -119,7 +155,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         startGuest,
         startGoogle,
         saveProfile,
+        setProfile: setProfileValue,
         setPlan,
+        refresh,
         setPins,
         logout,
       }}

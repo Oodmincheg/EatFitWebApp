@@ -8,17 +8,25 @@ due 2026-09-14 23:59 Kyiv, video pitch mandatory).
 
 ## What it does
 
-1. Onboarding: goal, age, weight, height, sex, activity → Harris-Benedict daily kcal target.
-2. Fridge contents and dietary tags (typed, or scanned from a photo by the model).
-3. The model writes a 7-day plan, 3 meals a day, with kcal, macros and per-ingredient
-   grams, in the UI language. Any day can be regenerated with a free-text wish.
+1. Onboarding: goal, age, weight, height, sex, activity → Harris-Benedict daily kcal
+   target, which My account can override by hand.
+2. Fridge contents and dietary tags, asked in the pre-generation dialog and seeded from
+   the current pantry (typed, or scanned from a photo by the model).
+3. The model writes the plan a day at a time and the week fills in as the days land:
+   3–7 days, 2–5 meals a day (snacks optional, set in My account), with kcal, macros and
+   per-ingredient grams, in the UI language. A whole day or a single meal can be
+   regenerated with a free-text wish.
 4. Own dishes: the user's recipes with known kcal and macros (or a model estimate),
    pinned into slots of the week. Generation fills only the unpinned slots.
-5. Shopping list = plan ingredients minus what the user owns, grouped by aisle.
-6. Silpo cart: the list is matched against Silpo's live catalog through Silpo's official
+5. Pantry: what is at home, with optional amounts in g / kg / ml / l / pcs, saved as you
+   type. Feeds generation and is subtracted from the shopping list; what the Silpo cart
+   bought can be pushed back into it.
+6. Shopping list = plan ingredients minus what the pantry covers, grouped by aisle,
+   editable (own rows, corrected weights, struck-out rows) and copyable as plain text.
+7. Silpo cart: the list is matched against Silpo's live catalog through Silpo's official
    MCP server, reviewed with real prices and pack sizes, then written into the user's
    Silpo cart. Payment happens on silpo.ua (the MCP has no order-placement tool).
-7. Daily check-off of eaten meals, plan history.
+8. Daily check-off of eaten meals, plan history.
 
 ## Stack
 
@@ -67,10 +75,16 @@ signs in on silpo.ua from the Cart page.
   Google sign-in on a device with a guest cookie upgrades the same user document.
   `GET /api/me` is the single bootstrap call: cookie → user, profile, latest plan, pins.
 - `POST /api/generate-plan` reads the profile, pins and dishes from Mongo (the client
-  sends only its local `startDate`), resolves pinned slots to meals, asks the model for
-  the free slots with a zod schema built for exactly those slots, retries once with the
-  validation error, recomputes every total server-side, stores the plan.
-  `POST /api/regenerate-day` does the same for one day and keeps that day's pins.
+  sends only its local `startDate`), then generates **one day per model call**, each with
+  a zod schema built for exactly that day's free slots, retrying once with the validation
+  error. Days stream back as NDJSON (`start` / `day` / `done` / `error`) and the plan
+  document is rewritten after each one, so an interrupted run leaves a shorter valid plan.
+  Every total is recomputed server-side, and the client validates each streamed event
+  against `PlanStreamEventSchema` before it touches state; a run that fails partway
+  leaves the session on the persisted partial plan rather than the previous one.
+  `POST /api/regenerate-day` replaces one day;
+  `POST /api/regenerate-meal` replaces one slot and leaves the rest of the day alone
+  (409 `slot_pinned` on the user's own pinned dish).
 - i18n: `lib/i18n/uk.ts` is the typed source of truth, `en.ts` must match it key for
   key; parameterized strings are functions. The locale is the `eatfit_locale` cookie,
   read by the root layout for `<html lang>` and metadata, and by the generation routes so
@@ -78,8 +92,17 @@ signs in on silpo.ua from the Cart page.
 - Own dishes live in `dishes`; pins are a weekly template on the user document
   (`pins[day][slot] = dishId`, `PUT /api/pins`). Pinning while a plan exists swaps the
   slot in place for today and future days. Pure helpers in `lib/pins.ts`.
-- The shopping list is derived client-side in `lib/shopping.ts` (bilingual stems for
-  aisles and owned-item matching), never persisted.
+- The pantry (`profile.pantry`, `PUT /api/pantry`) is the structured list of what is at
+  home; `profile.ingredients` is derived from it on write and remains the one string the
+  prompt and the matching read. The shopping list is derived client-side in
+  `lib/shopping.ts` (bilingual stems for aisles and matching) and never persisted; a
+  pantry row with no amount — or one counted in pieces — removes the item, a row with a
+  weight or volume is converted to grams (ml counts as g) and subtracted from it. The
+  user's own edits to that list live in localStorage, keyed by the plan.
+- Theme: the palette lives on `:root` as plain custom properties, `@theme inline` maps
+  Tailwind's colour names onto them, and `[data-theme]` (cookie, read in the root layout)
+  plus `prefers-color-scheme` swap the values. `bg-paper` is a surface, `bg-cream` the
+  page; literal `text-white` belongs only on the tomato and lime blocks.
 - Silpo (`lib/silpo/`): `auth.ts` is a Mongo-backed `OAuthClientProvider` per user;
   `client.ts` wraps the MCP client and validates tool results with zod; `match.ts`
   translates item names to Ukrainian (Silpo search is Ukrainian-only) and lets the model
@@ -125,6 +148,10 @@ Data lives in seven collections: `users` (profile and pins embedded), `plans`,
   Auth is spoofable; acceptable for a demo, not for production.
 - The three Google Fonts (Bricolage Grotesque, Instrument Sans, Space Mono) have no
   Cyrillic subset, so Ukrainian text renders in the system fallback font.
+- Generation holds one function invocation open for the whole plan (one model call per
+  day). Vercel Hobby caps function duration, so a seven-day plan may need a shorter
+  horizon there; the setting is in My account.
+- Nothing rate-limits the model-backed routes, and a guest session is one POST away.
 - Silpo cannot place or pay for the order through the MCP; the app hands the user
   `checkoutWebLink`. Silpo's minimum order is enforced at checkout, and weighted goods
   come in the store's step (0.55 kg of bananas for 120 g needed; the cart explains this).
@@ -145,8 +172,11 @@ Data lives in seven collections: `users` (profile and pins embedded), `plans`,
 
 ## Demo script
 
-Guest → onboarding → "Мої страви": add a dish, estimate its macros → "План на
-тиждень": pin it into a slot, generate → 7 days with the pinned meal marked 📌 →
-regenerate one day with a wish → "Продукти": tick what you own → "Зібрати кошик у
-Сільпо" → connect Silpo once → review real products and quantities → add to the Silpo
-cart → checkout link. Refresh: everything persists.
+Guest → onboarding → "Мій акаунт": set the daily target by hand, add a snack slot →
+"Комора": scan or type what's at home, put a weight on one item → "Мої страви": add a
+dish, estimate its macros → "План на тиждень": pin it into a slot, generate and watch the
+days land one by one → open a meal → "Замінити цю страву" with a wish, the rest of the day
+stays → "Продукти": the weighed pantry item is partly subtracted, add your own row, copy
+or print the list → "Зібрати кошик у Сільпо" → connect Silpo once → review real products
+and quantities → add to the Silpo cart → push what you bought back into the pantry →
+checkout link. Toggle 🌙 for dark. Refresh: everything persists.

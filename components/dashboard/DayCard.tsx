@@ -6,13 +6,16 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
 import { formatWeight } from '@/lib/shopping';
-import type { DayPlan, Meal, MealSlot } from '@/lib/schemas';
+import { daySlots, type DayPlan, type Meal, type MealSlot } from '@/lib/schemas';
 
-const MEAL_ROWS: { slot: MealSlot; accent: string }[] = [
-  { slot: 'breakfast', accent: 'text-tomato' },
-  { slot: 'lunch', accent: 'text-lime-deep' },
-  { slot: 'dinner', accent: 'text-tomato-deep' },
-];
+// Accent per slot; snacks share the muted one.
+const SLOT_ACCENT: Record<MealSlot, string> = {
+  breakfast: 'text-tomato',
+  morning_snack: 'text-latte',
+  lunch: 'text-lime-deep',
+  afternoon_snack: 'text-latte',
+  dinner: 'text-tomato-deep',
+};
 
 function mealWeight(meal: Meal): number {
   return meal.ingredients.reduce((sum, i) => sum + i.grams, 0);
@@ -34,32 +37,43 @@ export function DayCard({
   target,
   eaten,
   onRegenerate,
+  onRegenerateMeal,
   onPin,
   regenerating = false,
+  regeneratingSlot = null,
 }: {
   day: DayPlan;
   target: number;
   eaten?: MealSlot[];
   // Present only for today/future days — past days are history.
   onRegenerate?: (preference: string) => void;
+  // Replace a single slot, leaving the rest of the day alone; same day rule.
+  onRegenerateMeal?: (slot: MealSlot, preference: string) => void;
   // Pin one of the user's dishes into a slot (null = unpin); same day rule.
   onPin?: (slot: MealSlot, dishId: string | null) => void;
   regenerating?: boolean;
+  regeneratingSlot?: MealSlot | null;
 }) {
   const { t } = useI18n();
   const dayText = t.days[day.day];
+  const slots = daySlots(day);
   const offTarget = Math.abs(day.total_kcal - target) > target * 0.1;
   const macros = dayMacros(day);
   const [openSlot, setOpenSlot] = useState<MealSlot | null>(null);
   const [pickerSlot, setPickerSlot] = useState<MealSlot | null>(null);
   const [regenOpen, setRegenOpen] = useState(false);
+  const [swapSlot, setSwapSlot] = useState<MealSlot | null>(null);
   const [preference, setPreference] = useState('');
-  const openRow = MEAL_ROWS.find((r) => r.slot === openSlot);
   const openMeal = openSlot ? day.meals[openSlot] : null;
   const openMacros = openMeal ? mealMacros(openMeal) : null;
 
+  const closeSwap = () => {
+    setSwapSlot(null);
+    setPreference('');
+  };
+
   return (
-    <div className="flex flex-col rounded-2xl border-2 border-ink bg-white p-3">
+    <div className="flex flex-col rounded-2xl border-2 border-ink bg-paper p-3">
       <div className="flex items-baseline justify-between">
         <div className="flex items-center gap-1">
           <h3 className="font-display text-[15px] font-extrabold" title={dayText.label}>
@@ -102,21 +116,22 @@ export function DayCard({
         </p>
       )}
       <ul className={`mt-3 flex flex-1 flex-col gap-2 ${regenerating ? 'opacity-40' : ''}`}>
-        {MEAL_ROWS.map(({ slot, accent }) => {
-          const meal = day.meals[slot];
+        {slots.map((slot) => {
+          const meal = day.meals[slot]!;
           const weight = formatWeight(mealWeight(meal), t.units);
           const isEaten = eaten?.includes(slot) ?? false;
+          const busy = regeneratingSlot === slot;
           return (
             <li key={slot}>
               <button
                 onClick={() => setOpenSlot(slot)}
                 className={`w-full rounded-[9px] px-2 py-1.5 text-left hover:brightness-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
-                  isEaten ? 'bg-mint' : meal.dishId ? 'bg-peach' : 'bg-cream'
-                }`}
+                  busy ? 'animate-pulse opacity-50' : ''
+                } ${isEaten ? 'bg-mint' : meal.dishId ? 'bg-peach' : 'bg-cream'}`}
                 aria-label={t.day.viewIngredients(meal.name)}
               >
                 <p
-                  className={`flex items-center justify-between gap-1 text-[9px] font-bold tracking-wide ${accent}`}
+                  className={`flex items-center justify-between gap-1 text-[9px] font-bold tracking-wide ${SLOT_ACCENT[slot]}`}
                 >
                   <span>
                     {t.mealLabels[slot]}
@@ -144,20 +159,17 @@ export function DayCard({
       </ul>
 
       <Modal
-        open={openMeal !== null}
+        open={openMeal != null}
         onClose={() => setOpenSlot(null)}
         labelledBy="meal-ingredients-title"
       >
-        {openMeal && openRow && (
+        {openMeal && openSlot && (
           <>
-            <p className={`text-[10px] font-bold tracking-wide ${openRow.accent}`}>
-              {t.mealLabels[openRow.slot]} · {dayText.label.toUpperCase()}
+            <p className={`text-[10px] font-bold tracking-wide ${SLOT_ACCENT[openSlot]}`}>
+              {t.mealLabels[openSlot]} · {dayText.label.toUpperCase()}
               {openMeal.dishId && <span className="ml-1.5 text-latte">📌 {t.pins.pinned}</span>}
             </p>
-            <h2
-              id="meal-ingredients-title"
-              className="mt-1 font-display text-xl font-extrabold"
-            >
+            <h2 id="meal-ingredients-title" className="mt-1 font-display text-xl font-extrabold">
               {openMeal.name}
             </h2>
             <p className="mt-0.5 font-mono text-xs font-bold text-sand">
@@ -190,27 +202,43 @@ export function DayCard({
             ) : (
               <p className="mt-4 text-sm text-latte">{t.day.noIngredients}</p>
             )}
-            {onPin && (
+            {onRegenerateMeal && openMeal.dishId && (
+              <p className="mt-4 text-xs font-semibold text-latte">{t.day.swapPinned}</p>
+            )}
+            {(onPin || onRegenerateMeal) && (
               <div className="mt-5 flex flex-wrap justify-end gap-3">
-                {openMeal.dishId && (
+                {onRegenerateMeal && !openMeal.dishId && (
                   <Button
                     variant="secondary"
                     onClick={() => {
-                      onPin(openRow.slot, null);
+                      setSwapSlot(openSlot);
+                      setOpenSlot(null);
+                    }}
+                  >
+                    {t.day.swap}
+                  </Button>
+                )}
+                {onPin && openMeal.dishId && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      onPin(openSlot, null);
                       setOpenSlot(null);
                     }}
                   >
                     {t.pins.unpin}
                   </Button>
                 )}
-                <Button
-                  onClick={() => {
-                    setPickerSlot(openRow.slot);
-                    setOpenSlot(null);
-                  }}
-                >
-                  {t.pins.pin}
-                </Button>
+                {onPin && (
+                  <Button
+                    onClick={() => {
+                      setPickerSlot(openSlot);
+                      setOpenSlot(null);
+                    }}
+                  >
+                    {t.pins.pin}
+                  </Button>
+                )}
               </div>
             )}
           </>
@@ -221,7 +249,7 @@ export function DayCard({
         <DishPicker
           open={pickerSlot !== null}
           title={pickerSlot ? t.pins.pickTitle(t.meals[pickerSlot], dayText.label) : ''}
-          currentId={pickerSlot ? day.meals[pickerSlot].dishId : undefined}
+          currentId={pickerSlot ? day.meals[pickerSlot]?.dishId : undefined}
           onPick={(id) => {
             if (pickerSlot) onPin(pickerSlot, id);
             setPickerSlot(null);
@@ -234,11 +262,41 @@ export function DayCard({
         />
       )}
 
-      <Modal
-        open={regenOpen}
-        onClose={() => setRegenOpen(false)}
-        labelledBy="regen-day-title"
-      >
+      <Modal open={swapSlot !== null} onClose={closeSwap} labelledBy="swap-meal-title">
+        {swapSlot && (
+          <>
+            <h2 id="swap-meal-title" className="font-display text-xl font-extrabold">
+              {t.day.swapTitle(t.meals[swapSlot])}
+            </h2>
+            <p className="mt-1 text-sm font-semibold text-latte">{t.day.swapText}</p>
+            <textarea
+              value={preference}
+              onChange={(e) => setPreference(e.target.value)}
+              placeholder={t.day.regenPlaceholder}
+              rows={3}
+              maxLength={300}
+              autoFocus
+              className="mt-4 w-full rounded-xl border-2 border-peach-line bg-paper px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none"
+              aria-label={t.day.swapAria(t.meals[swapSlot], dayText.acc)}
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <Button variant="secondary" onClick={closeSwap}>
+                {t.common.cancel}
+              </Button>
+              <Button
+                onClick={() => {
+                  onRegenerateMeal?.(swapSlot, preference);
+                  closeSwap();
+                }}
+              >
+                {t.day.regenButton}
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={regenOpen} onClose={() => setRegenOpen(false)} labelledBy="regen-day-title">
         <h2 id="regen-day-title" className="font-display text-xl font-extrabold">
           {t.day.regenTitle(dayText.acc)}
         </h2>
@@ -250,7 +308,7 @@ export function DayCard({
           rows={3}
           maxLength={300}
           autoFocus
-          className="mt-4 w-full rounded-xl border-2 border-peach-line bg-white px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none"
+          className="mt-4 w-full rounded-xl border-2 border-peach-line bg-paper px-3 py-2.5 text-sm font-medium focus:border-ink focus:outline-none"
           aria-label={t.day.regenAria(dayText.acc)}
         />
         <div className="mt-6 flex justify-end gap-3">

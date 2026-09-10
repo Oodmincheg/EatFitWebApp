@@ -81,9 +81,9 @@ export default function OnboardingPage() {
     heightCm: Number(state.params.heightCm),
     sex: state.params.sex!,
     activityLevel: state.params.activityLevel as ProfileInput['activityLevel'],
-    // The fridge list and dietary tags are collected in the generate-plan
+    // The pantry and dietary tags are collected in the generate-plan
     // dialog, not here.
-    ingredients: '',
+    pantry: [],
     dietaryTags: [],
   });
 

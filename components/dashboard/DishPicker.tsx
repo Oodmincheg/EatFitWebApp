@@ -59,7 +59,7 @@ export function DishPicker({
                   onClick={() => onPick(d.id)}
                   aria-pressed={active}
                   className={`w-full rounded-xl border-2 px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
-                    active ? 'border-ink bg-peach' : 'border-peach-line bg-white hover:border-ink'
+                    active ? 'border-ink bg-peach' : 'border-peach-line bg-paper hover:border-ink'
                   }`}
                 >
                   <span className="block text-sm font-semibold text-ink">{d.name}</span>

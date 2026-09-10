@@ -17,8 +17,70 @@ export type Sex = z.infer<typeof SexSchema>;
 export type ActivityLevel = z.infer<typeof ActivityLevelSchema>;
 export type DietaryTag = z.infer<typeof DietaryTagSchema>;
 
+// How a pantry amount is entered. Everything but pieces converts to grams
+// for the shopping-list subtraction; millilitres are counted as grams, which
+// is right for water-like staples and close enough for milk or oil.
+export const PANTRY_UNITS = ['g', 'kg', 'ml', 'l', 'pc'] as const;
+export const PantryUnitSchema = z.enum(PANTRY_UNITS);
+export type PantryUnit = z.infer<typeof PantryUnitSchema>;
+
+const UNIT_GRAMS: Record<PantryUnit, number | null> = {
+  g: 1,
+  kg: 1000,
+  ml: 1,
+  l: 1000,
+  pc: null, // a count says nothing about weight
+};
+
+// One line of the pantry. An item with no amount — or one counted in pieces —
+// is treated as "enough of it", the way the old free-text list behaved.
+export const PantryItemSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  amount: z.number().nonnegative().max(100_000).optional(),
+  unit: PantryUnitSchema.optional(),
+  // Written by versions before units existed; read, never written.
+  grams: z.number().nonnegative().max(100_000).optional(),
+});
+export type PantryItem = z.infer<typeof PantryItemSchema>;
+
+// The weight this row covers, or null when it covers the item outright.
+export function pantryGrams(item: PantryItem): number | null {
+  if (item.amount === undefined) return item.grams ?? null;
+  const factor = UNIT_GRAMS[item.unit ?? 'g'];
+  return factor === null ? null : item.amount * factor;
+}
+
+// Meal slots in fixed daily order; `mealSlots` on the profile picks which of
+// them a generated day carries (breakfast, lunch and dinner by default).
+export const MealSlotSchema = z.enum([
+  'breakfast',
+  'morning_snack',
+  'lunch',
+  'afternoon_snack',
+  'dinner',
+]);
+export type MealSlot = z.infer<typeof MealSlotSchema>;
+export const MEAL_SLOTS: MealSlot[] = [
+  'breakfast',
+  'morning_snack',
+  'lunch',
+  'afternoon_snack',
+  'dinner',
+];
+export const DEFAULT_MEAL_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner'];
+
+export const PLAN_DAY_OPTIONS = [3, 5, 7] as const;
+export const PlanDaysSchema = z.union([z.literal(3), z.literal(5), z.literal(7)]);
+export const DEFAULT_PLAN_DAYS = 7;
+
+// Slots in their canonical daily order, deduplicated.
+export function orderSlots(slots: MealSlot[]): MealSlot[] {
+  return MEAL_SLOTS.filter((slot) => slots.includes(slot));
+}
+
 // What the client sends on onboarding finish. `calorieTarget` is NOT
-// accepted from the client — the server recomputes it from raw inputs.
+// accepted from the client — the server recomputes it from raw inputs,
+// unless `calorieTargetOverride` sets it by hand.
 export const ProfileInputSchema = z.object({
   goal: GoalSchema,
   age: z.number().int().min(10).max(100),
@@ -26,16 +88,27 @@ export const ProfileInputSchema = z.object({
   heightCm: z.number().min(100).max(250),
   sex: SexSchema,
   activityLevel: ActivityLevelSchema,
-  ingredients: z.string().max(2000),
+  pantry: z.array(PantryItemSchema).max(120).default([]),
   dietaryTags: z.array(DietaryTagSchema),
+  // null = back to the computed target.
+  calorieTargetOverride: z.number().int().min(800).max(6000).nullable().optional(),
+  mealSlots: z.array(MealSlotSchema).min(2).max(5).optional(),
+  planDays: PlanDaysSchema.optional(),
 });
 export type ProfileInput = z.infer<typeof ProfileInputSchema>;
 
 export const ProfileSchema = ProfileInputSchema.extend({
+  // Derived from `pantry` on every write; the LLM prompt and the owned-item
+  // matching read this one string.
+  ingredients: z.string().max(4000),
   calorieTarget: z.number(),
   createdAt: z.string(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
+
+export const PantryBodySchema = z.object({
+  pantry: z.array(PantryItemSchema).max(120),
+});
 
 // Local calendar date, e.g. "2026-07-10".
 export const DateKeySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -73,13 +146,17 @@ export const DAY_NAMES = [
 export const DayNameSchema = z.enum(DAY_NAMES);
 export type DayName = z.infer<typeof DayNameSchema>;
 
+// The slots a stored day actually carries, in daily order. Days generated
+// before snacks existed carry exactly breakfast/lunch/dinner.
+export function daySlots(day: { meals: Partial<Record<MealSlot, Meal>> }): MealSlot[] {
+  return MEAL_SLOTS.filter((slot) => day.meals[slot]);
+}
+
 export const DayPlanSchema = z.object({
   day: DayNameSchema,
-  meals: z.object({
-    breakfast: MealSchema,
-    lunch: MealSchema,
-    dinner: MealSchema,
-  }),
+  // Which slots a day carries follows the profile, so the record is partial;
+  // `daySlots()` returns the ones actually present, in daily order.
+  meals: z.partialRecord(MealSlotSchema, MealSchema),
   total_kcal: z.number(),
   // Server-computed sums of the meals' macros (absent on legacy plans).
   total_protein_g: z.number().optional(),
@@ -97,19 +174,15 @@ export const ModelMealSchema = MealSchema.omit({ dishId: true }).required({
 });
 export type ModelMeal = z.infer<typeof ModelMealSchema>;
 const ModelDayPlanSchema = DayPlanSchema.extend({
-  meals: z.object({
-    breakfast: ModelMealSchema,
-    lunch: ModelMealSchema,
-    dinner: ModelMealSchema,
-  }),
+  meals: z.partialRecord(MealSlotSchema, ModelMealSchema),
 });
 export const ModelPlanSchema = z.object({
-  days: z.array(ModelDayPlanSchema).length(7),
+  days: z.array(ModelDayPlanSchema).min(1).max(7),
 });
 
 // Stored/UI-facing plan: macros optional (legacy plans lack them).
 export const MealPlanSchema = z.object({
-  days: z.array(DayPlanSchema).length(7),
+  days: z.array(DayPlanSchema).min(1).max(7),
   generatedAt: z.string(),
   // Local date of days[0]. Plans now start on the day they were generated;
   // legacy plans lack this and are Monday-anchored (see planStart in dates.ts).
@@ -121,14 +194,32 @@ export const GeneratePlanBodySchema = z.object({
   startDate: DateKeySchema.optional(),
 });
 
+// The generate-plan stream is a boundary like any other: the route builds
+// these events and the client validates every line before it touches state.
+export const PlanStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('start'),
+    totalDays: z.number().int().min(1).max(7),
+    startDate: DateKeySchema,
+  }),
+  z.object({ type: z.literal('day'), index: z.number().int().min(0).max(6), day: DayPlanSchema }),
+  z.object({ type: z.literal('done'), plan: MealPlanSchema }),
+  z.object({ type: z.literal('error'), error: z.string(), partial: z.boolean() }),
+]);
+export type PlanStreamEvent = z.infer<typeof PlanStreamEventSchema>;
+
 // Single-day regeneration: what the model must return (the day name and
 // totals are assigned server-side).
 export const ModelDaySchema = z.object({
-  meals: z.object({
-    breakfast: ModelMealSchema,
-    lunch: ModelMealSchema,
-    dinner: ModelMealSchema,
-  }),
+  meals: z.partialRecord(MealSlotSchema, ModelMealSchema),
+});
+
+// Replace a single slot of one day, keeping the rest of that day.
+export const RegenerateMealBodySchema = z.object({
+  dayIndex: z.number().int().min(0).max(6),
+  slot: MealSlotSchema,
+  preference: z.string().max(300).optional(),
+  today: DateKeySchema.optional(),
 });
 
 export const RegenerateDayBodySchema = z.object({
@@ -149,9 +240,6 @@ export const ParseFridgeBodySchema = z.object({
 });
 
 // ── Day progress (meals checked off as eaten) ───────────────
-export const MealSlotSchema = z.enum(['breakfast', 'lunch', 'dinner']);
-export type MealSlot = z.infer<typeof MealSlotSchema>;
-export const MEAL_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner'];
 
 // ── User dishes (own recipes with known kcal and macros) ────
 export const DishInputSchema = z.object({
@@ -341,7 +429,8 @@ export type ShoppingCategory =
 
 export interface ShoppingItem {
   name: string;
-  grams: number; // total weight needed across the week (0 = unknown)
+  grams: number; // still to buy across the week (0 = unknown)
+  haveGrams?: number; // already covered by a weighed pantry row
   usedIn: string[];
   category: ShoppingCategory;
 }
@@ -369,6 +458,23 @@ export function coerceStoredPlan(plan: MealPlan): MealPlan {
 }
 
 // ── Client-facing session/user shape ────────────────────────
-export type Session =
-  | { kind: 'google'; uid: string; displayName: string; email: string }
-  | { kind: 'guest'; uid: string };
+export const SessionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('google'),
+    uid: z.string().min(1),
+    displayName: z.string(),
+    email: z.string(),
+  }),
+  z.object({ kind: z.literal('guest'), uid: z.string().min(1) }),
+]);
+export type Session = z.infer<typeof SessionSchema>;
+
+// What `GET /api/me` and `POST /api/session` answer with — the session's
+// bootstrap boundary, validated before any of it reaches React state.
+export const SessionPayloadSchema = z.object({
+  user: SessionSchema,
+  profile: ProfileSchema.nullable(),
+  plan: MealPlanSchema.nullable(),
+  pins: PinsSchema.optional(),
+});
+export type SessionPayload = z.infer<typeof SessionPayloadSchema>;
