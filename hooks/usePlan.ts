@@ -3,16 +3,9 @@
 import { useCallback, useState } from 'react';
 import { useSession } from './useSession';
 import { dateKey } from '@/lib/dates';
-import type { DayPlan, MealPlan, MealSlot } from '@/lib/schemas';
+import { PlanStreamEventSchema, type DayPlan, type MealSlot } from '@/lib/schemas';
 
 export type PlanError = 'generation_failed' | 'upstream_error' | 'network' | null;
-
-// What the streaming generate route sends, one JSON object per line.
-type StreamEvent =
-  | { type: 'start'; totalDays: number; startDate: string }
-  | { type: 'day'; index: number; day: DayPlan }
-  | { type: 'done'; plan: MealPlan }
-  | { type: 'error'; error: string; partial: boolean };
 
 export interface PlanDraft {
   startDate: string;
@@ -26,7 +19,7 @@ async function toError(res: Response): Promise<PlanError> {
 }
 
 export function usePlan() {
-  const { plan, setPlan } = useSession();
+  const { plan, setPlan, refresh } = useSession();
   const [generating, setGenerating] = useState(false);
   // Days that have landed so far, so the week fills in as the model works.
   const [draft, setDraft] = useState<PlanDraft | null>(null);
@@ -58,6 +51,8 @@ export function usePlan() {
       const decoder = new TextDecoder();
       let buffer = '';
       let finished = false;
+      // Days that arrived before a failure are already persisted server-side.
+      let landed = 0;
 
       // NDJSON: complete lines are events, the tail stays buffered.
       while (!finished) {
@@ -68,18 +63,29 @@ export function usePlan() {
         buffer = lines.pop() ?? '';
         for (const line of lines) {
           if (!line.trim()) continue;
-          let event: StreamEvent;
+          let payload: unknown;
           try {
-            event = JSON.parse(line) as StreamEvent;
+            payload = JSON.parse(line);
           } catch {
-            continue;
+            setError('generation_failed');
+            finished = true;
+            break;
           }
+          const parsed = PlanStreamEventSchema.safeParse(payload);
+          if (!parsed.success) {
+            setError('generation_failed');
+            finished = true;
+            break;
+          }
+          const event = parsed.data;
           if (event.type === 'start') {
             setDraft({ startDate: event.startDate, totalDays: event.totalDays, days: [] });
           } else if (event.type === 'day') {
+            landed += 1;
             setDraft((prev) => (prev ? { ...prev, days: [...prev.days, event.day] } : prev));
           } else if (event.type === 'done') {
             setPlan(event.plan);
+            landed = 0;
             finished = true;
           } else {
             setError(event.error === 'generation_failed' ? 'generation_failed' : 'upstream_error');
@@ -88,13 +94,18 @@ export function usePlan() {
         }
       }
       if (!finished) setError('network');
+      // A run that died after some days left a shorter plan in Mongo; adopt
+      // it, or the UI would keep showing the previous one while the server
+      // has already moved on.
+      if (landed > 0) await refresh();
+      if (!finished) setError('network');
     } catch {
       setError('network');
     } finally {
       setGenerating(false);
       setDraft(null);
     }
-  }, [setPlan]);
+  }, [setPlan, refresh]);
 
   // Replace a single day of the current plan (today or a future day only).
   // `preference` is the user's free-text wish for that day.

@@ -118,6 +118,22 @@ describe('shoppingList', () => {
     expect(items.find((i) => i.name === 'eggs')).toBeUndefined();
   });
 
+  it('spends each pantry gram once across ingredients that match it', () => {
+    // Both requirements match the single "milk" row; 50 g x 7 days each.
+    const twoMilks = planWith({
+      'Milk bowl': [g('milk', 50)],
+      'Skimmed bowl': [g('skimmed milk', 50)],
+      Toast: [g('bread', 40)],
+    });
+    const items = shoppingList(twoMilks, [{ name: 'milk', amount: 350, unit: 'g' }]);
+    const names = items.map((i) => i.name);
+    // 700 g needed in total, 350 g at home: one of the two is still on the list.
+    expect(names).toContain('bread');
+    const milkRows = items.filter((i) => i.name.includes('milk'));
+    expect(milkRows).toHaveLength(1);
+    expect(milkRows[0].grams).toBe(350);
+  });
+
   it('reads the weight of rows written before units existed', () => {
     const items = shoppingList(plan, [{ name: 'rice', grams: 200 }]);
     expect(items.find((i) => i.name === 'rice')?.grams).toBe(360);

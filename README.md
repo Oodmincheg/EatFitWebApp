@@ -79,7 +79,10 @@ signs in on silpo.ua from the Cart page.
   a zod schema built for exactly that day's free slots, retrying once with the validation
   error. Days stream back as NDJSON (`start` / `day` / `done` / `error`) and the plan
   document is rewritten after each one, so an interrupted run leaves a shorter valid plan.
-  Every total is recomputed server-side. `POST /api/regenerate-day` replaces one day;
+  Every total is recomputed server-side, and the client validates each streamed event
+  against `PlanStreamEventSchema` before it touches state; a run that fails partway
+  leaves the session on the persisted partial plan rather than the previous one.
+  `POST /api/regenerate-day` replaces one day;
   `POST /api/regenerate-meal` replaces one slot and leaves the rest of the day alone
   (409 `slot_pinned` on the user's own pinned dish).
 - i18n: `lib/i18n/uk.ts` is the typed source of truth, `en.ts` must match it key for

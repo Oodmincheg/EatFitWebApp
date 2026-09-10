@@ -135,6 +135,19 @@ list survived a reload. Once the pantry became a saved, structured list that dra
 shadowed it: edit the pantry, open the dialog, and yesterday's text was still there. The
 draft is gone and the dialog always opens on the current pantry.
 
+## 2026-09-10 · Pantry stock is spent, not re-read
+
+Two findings had the same root: the pantry was treated as a set of facts to
+compare against rather than a stock to draw down. Several ingredients matching one
+weighed row each consumed it in full, and groceries bought through the cart were
+merged by name, so buying more of something already in the pantry changed nothing.
+The shopping list now draws each row down once, and purchases go through
+`replenishPantry`, which sums compatible units and falls back to an explicit
+"no amount" — the app's word for "enough of it" — rather than inventing a number
+when a count meets a weight. The cart hands over the lines it actually committed,
+sized from the product (kg for weighed goods, pack contents × quantity otherwise),
+so unmatched and excluded rows never reach the pantry.
+
 ## 2026-09-09 · Regeneration checks its own output
 
 Two failure modes were visible as soon as the flow was used in anger: "replace this meal"

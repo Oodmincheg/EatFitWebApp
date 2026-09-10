@@ -22,6 +22,9 @@ interface SessionState {
   saveProfile: (input: ProfileInput) => Promise<Profile>;
   setProfile: (profile: Profile) => void;
   setPlan: (plan: MealPlan) => void;
+  // Re-read the server's copy — used when a stream leaves the client unsure
+  // which plan is current.
+  refresh: () => Promise<void>;
   setPins: (pins: Pins) => void;
   logout: () => Promise<void>;
 }
@@ -40,6 +43,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlanState] = useState<MealPlan | null>(null);
   const [pins, setPinsState] = useState<Pins>({});
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/me');
+      if (!res.ok) return;
+      const data = await res.json();
+      setUser(data.user);
+      setProfile(data.profile);
+      setPlanState(data.plan);
+      setPinsState(data.pins ?? {});
+    } catch {
+      // Offline or server error — keep whatever the session already holds.
+    }
+  }, []);
 
   // One bootstrap call on app load: cookie → user + profile + latest plan + pins.
   useEffect(() => {
@@ -123,6 +140,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         saveProfile,
         setProfile: setProfileValue,
         setPlan,
+        refresh,
         setPins,
         logout,
       }}

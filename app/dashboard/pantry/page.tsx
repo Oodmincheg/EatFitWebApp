@@ -22,6 +22,8 @@ export default function PantryPage() {
   const [bulk, setBulk] = useState('');
   const touched = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // What the debounce still owes the server, so leaving the page flushes it.
+  const pending = useRef<PantryItem[] | null>(null);
 
   // Adopt the session's pantry until the user starts editing; after that the
   // local list is authoritative (a half-typed row must not vanish on save).
@@ -34,6 +36,7 @@ export default function PantryPage() {
       const cleaned = next
         .map((item) => ({ ...item, name: item.name.trim() }))
         .filter((item) => item.name);
+      pending.current = null;
       setStatus('saving');
       try {
         await save(cleaned);
@@ -50,13 +53,24 @@ export default function PantryPage() {
       touched.current = true;
       const capped = next.slice(0, MAX_ITEMS);
       setItems(capped);
+      pending.current = capped;
+      // "Saved" must not stay on screen while an edit is still owed.
+      setStatus('saving');
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => flush(capped), SAVE_DELAY);
     },
     [flush]
   );
 
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  // Leaving the page mid-debounce would otherwise drop the edit — send it
+  // now; client-side navigation keeps the request alive.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (pending.current) void flush(pending.current);
+    },
+    [flush]
+  );
 
   if (!profile) return null;
 

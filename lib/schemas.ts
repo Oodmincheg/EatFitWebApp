@@ -194,6 +194,20 @@ export const GeneratePlanBodySchema = z.object({
   startDate: DateKeySchema.optional(),
 });
 
+// The generate-plan stream is a boundary like any other: the route builds
+// these events and the client validates every line before it touches state.
+export const PlanStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('start'),
+    totalDays: z.number().int().min(1).max(7),
+    startDate: DateKeySchema,
+  }),
+  z.object({ type: z.literal('day'), index: z.number().int().min(0).max(6), day: DayPlanSchema }),
+  z.object({ type: z.literal('done'), plan: MealPlanSchema }),
+  z.object({ type: z.literal('error'), error: z.string(), partial: z.boolean() }),
+]);
+export type PlanStreamEvent = z.infer<typeof PlanStreamEventSchema>;
+
 // Single-day regeneration: what the model must return (the day name and
 // totals are assigned server-side).
 export const ModelDaySchema = z.object({

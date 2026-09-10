@@ -7,7 +7,7 @@ import { dateKey, parseDateKey } from '@/lib/dates';
 import { getLocale } from '@/lib/i18n/server';
 import { pinnedWeek } from '@/lib/pins';
 import { profilePlanDays } from '@/lib/profile';
-import { GeneratePlanBodySchema, type MealPlan } from '@/lib/schemas';
+import { GeneratePlanBodySchema, type MealPlan, type PlanStreamEvent } from '@/lib/schemas';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // one model call per day, run back to back
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (event: unknown) =>
+      const send = (event: PlanStreamEvent) =>
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
 
       send({ type: 'start', totalDays, startDate });

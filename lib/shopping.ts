@@ -153,8 +153,9 @@ export function categorize(name: string): ShoppingCategory {
 }
 
 // The week's ingredients minus what the pantry covers. A pantry row without
-// a weight means "enough of it" (the old free-text behaviour); a row with a
-// weight only covers that much, and the rest is still on the list.
+// a weight — or one counted in pieces — means "enough of it" (the old
+// free-text behaviour); a row with a weight only covers that much, and each
+// gram is spent once even when several ingredients match the same row.
 export function shoppingList(plan: MealPlan, pantry: PantryItem[]): ShoppingItem[] {
   const items = new Map<string, { grams: number; usedIn: Set<string> }>();
 
@@ -171,23 +172,31 @@ export function shoppingList(plan: MealPlan, pantry: PantryItem[]): ShoppingItem
     }
   }
 
+  // `remaining` is null for rows that cover an item outright; the rest is
+  // drawn down as ingredients claim it, in name order so the result is stable.
+  const stock = pantry.map((row) => ({ name: row.name, remaining: pantryGrams(row) }));
   const out: ShoppingItem[] = [];
-  for (const [name, { grams, usedIn }] of items) {
-    const matches = pantry.filter((row) => namesMatch(name, row.name));
-    if (matches.length === 0) {
-      out.push({ name, grams, usedIn: [...usedIn], category: categorize(name) });
-      continue;
+
+  for (const [name, { grams, usedIn }] of [...items.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const matches = stock.filter((row) => namesMatch(name, row.name));
+    const covered = matches.some((row) => row.remaining === null);
+    if (matches.length > 0 && (covered || grams <= 0)) continue;
+
+    let have = 0;
+    for (const row of matches) {
+      if (have >= grams) break;
+      const take = Math.min(row.remaining ?? 0, grams - have);
+      row.remaining = (row.remaining ?? 0) - take;
+      have += take;
     }
-    // Any weightless match (no amount, or a count in pieces) covers the item
-    // entirely; so does an unknown need.
-    const weights = matches.map(pantryGrams);
-    if (weights.some((w) => w === null) || grams <= 0) continue;
-    const have = weights.reduce((sum: number, w) => sum + (w ?? 0), 0);
-    if (have >= grams) continue;
+    if (matches.length > 0 && have >= grams) continue;
+
     out.push({
       name,
       grams: Math.round(grams - have),
-      haveGrams: Math.round(have),
+      ...(have > 0 ? { haveGrams: Math.round(have) } : {}),
       usedIn: [...usedIn],
       category: categorize(name),
     });

@@ -9,9 +9,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { useSession } from '@/hooks/useSession';
 import { useOrders } from '@/hooks/useOrders';
 import { usePantry } from '@/hooks/usePantry';
-import { mergePantry } from '@/lib/pantry';
+import { replenishPantry } from '@/lib/pantry';
 import { PENDING_CART_KEY } from '@/lib/stores';
-import type { OrderItem } from '@/lib/schemas';
+import type { OrderItem, PantryItem } from '@/lib/schemas';
 
 export default function CartPage() {
   const { t } = useI18n();
@@ -20,7 +20,9 @@ export default function CartPage() {
   const { pantry, saving, save } = usePantry();
   const toast = useToast();
   // Offered once the cart is written: what was just bought is now at home.
-  const [committed, setCommitted] = useState(false);
+  // Holds the committed lines, not the original request — unmatched and
+  // excluded rows never reach the pantry.
+  const [purchased, setPurchased] = useState<PantryItem[] | null>(null);
   // undefined = still reading storage; null = nothing handed off.
   const [items, setItems] = useState<OrderItem[] | null | undefined>(undefined);
 
@@ -57,12 +59,12 @@ export default function CartPage() {
         <>
           <SilpoCart
             items={items}
-            onCommitted={() => {
-              setCommitted(true);
+            onCommitted={(_result, bought) => {
+              setPurchased(bought);
               placeOrder(items).catch(() => {});
             }}
           />
-          {committed && (
+          {purchased && purchased.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-ink bg-peach px-4 py-3 text-sm font-semibold">
               <span>
                 <span aria-hidden="true">🧊 </span>
@@ -73,7 +75,7 @@ export default function CartPage() {
                 disabled={saving}
                 onClick={async () => {
                   try {
-                    await save(mergePantry(pantry, items.map(({ name, grams }) => ({ name, grams }))));
+                    await save(replenishPantry(pantry, purchased));
                     toast(t.pantry.fromCartDone);
                   } catch {
                     toast(t.pantry.saveFailed);
