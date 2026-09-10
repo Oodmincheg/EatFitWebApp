@@ -458,6 +458,23 @@ export function coerceStoredPlan(plan: MealPlan): MealPlan {
 }
 
 // ── Client-facing session/user shape ────────────────────────
-export type Session =
-  | { kind: 'google'; uid: string; displayName: string; email: string }
-  | { kind: 'guest'; uid: string };
+export const SessionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('google'),
+    uid: z.string().min(1),
+    displayName: z.string(),
+    email: z.string(),
+  }),
+  z.object({ kind: z.literal('guest'), uid: z.string().min(1) }),
+]);
+export type Session = z.infer<typeof SessionSchema>;
+
+// What `GET /api/me` and `POST /api/session` answer with — the session's
+// bootstrap boundary, validated before any of it reaches React state.
+export const SessionPayloadSchema = z.object({
+  user: SessionSchema,
+  profile: ProfileSchema.nullable(),
+  plan: MealPlanSchema.nullable(),
+  pins: PinsSchema.optional(),
+});
+export type SessionPayload = z.infer<typeof SessionPayloadSchema>;

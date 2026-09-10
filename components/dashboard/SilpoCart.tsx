@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
 import type { Dict } from '@/lib/i18n';
 import { formatWeight } from '@/lib/shopping';
+import { purchasedPantryItem } from '@/lib/silpo/packSize';
 import type {
   OrderItem,
   PantryItem,
-  PantryUnit,
   SilpoCart as SilpoCartData,
   SilpoCartLine,
   SilpoCommitResult,
@@ -80,42 +80,14 @@ function lineMax(line: SilpoCartLine): number {
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
-// Silpo states pack contents as text ("400г", "1 л", "10шт").
-const RATIO_UNITS: Record<string, PantryUnit> = {
-  г: 'g',
-  кг: 'kg',
-  мл: 'ml',
-  л: 'l',
-  шт: 'pc',
-};
-
-function packAmount(displayRatio: string | null): { amount: number; unit: PantryUnit } | null {
-  const match = displayRatio?.match(/([\d.,]+)\s*(кг|мл|шт|г|л)/i);
-  if (!match) return null;
-  const amount = Number(match[1].replace(',', '.'));
-  const unit = RATIO_UNITS[match[2].toLowerCase()];
-  return Number.isFinite(amount) && amount > 0 && unit ? { amount, unit } : null;
-}
-
-// What actually goes home, per committed line: weighed goods come in kg,
-// packs multiply their stated contents, and a pack whose contents cannot be
-// read stays an explicit count rather than a guessed weight.
-function toPantryItem(line: SilpoCartLine, quantity: number): PantryItem {
-  const product = line.product!;
-  if (product.weighted) return { name: line.query, amount: round3(quantity), unit: 'kg' };
-  const pack = packAmount(product.displayRatio);
-  return pack && pack.unit !== 'pc'
-    ? { name: line.query, amount: round3(pack.amount * quantity), unit: pack.unit }
-    : { name: line.query, amount: quantity, unit: 'pc' };
-}
-
 export function SilpoCart({
   items,
   onCommitted,
 }: {
   items: OrderItem[];
   // `purchased` is what the cart really took: matched products only, at the
-  // quantities the user settled on.
+  // quantities the user settled on. Empty when Silpo reported a product-level
+  // error, because an accepted write is not proof the quantity was available.
   onCommitted?: (result: SilpoCommitResult, purchased: PantryItem[]) => void;
 }) {
   const { t } = useI18n();
@@ -175,9 +147,17 @@ export function SilpoCart({
         lines,
       });
       setState({ phase: 'committed', cart, quantities, result });
+      // Silpo answers 200 even when a line could not be honoured in full
+      // (`product.offer.stock.max` and friends), so an error-level validation
+      // means we do not know what was actually reserved.
+      const rejected = result.validations.some((v) => v.level === 'error');
       onCommitted?.(
         result,
-        committed.map((l) => toPantryItem(l, quantities[l.query]))
+        rejected
+          ? []
+          : committed.map((l) =>
+              purchasedPantryItem(l.query, l.product!, quantities[l.query])
+            )
       );
     } catch (e) {
       const err = e instanceof CartError ? e : new CartError('error');

@@ -21,8 +21,10 @@ export default function CartPage() {
   const toast = useToast();
   // Offered once the cart is written: what was just bought is now at home.
   // Holds the committed lines, not the original request — unmatched and
-  // excluded rows never reach the pantry.
-  const [purchased, setPurchased] = useState<PantryItem[] | null>(null);
+  // excluded rows never reach the pantry. `key` identifies one commit so the
+  // same groceries cannot be counted into the pantry twice.
+  const [purchase, setPurchase] = useState<{ key: string; items: PantryItem[] } | null>(null);
+  const [imported, setImported] = useState<string[]>([]);
   // undefined = still reading storage; null = nothing handed off.
   const [items, setItems] = useState<OrderItem[] | null | undefined>(undefined);
 
@@ -59,12 +61,15 @@ export default function CartPage() {
         <>
           <SilpoCart
             items={items}
-            onCommitted={(_result, bought) => {
-              setPurchased(bought);
+            onCommitted={(result, bought) => {
+              const key = `${result.cartId}:${bought
+                .map((i) => `${i.name}=${i.amount ?? ''}${i.unit ?? ''}`)
+                .join('|')}`;
+              setPurchase(bought.length > 0 ? { key, items: bought } : null);
               placeOrder(items).catch(() => {});
             }}
           />
-          {purchased && purchased.length > 0 && (
+          {purchase && !imported.includes(purchase.key) && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-ink bg-peach px-4 py-3 text-sm font-semibold">
               <span>
                 <span aria-hidden="true">🧊 </span>
@@ -75,7 +80,9 @@ export default function CartPage() {
                 disabled={saving}
                 onClick={async () => {
                   try {
-                    await save(replenishPantry(pantry, purchased));
+                    await save(replenishPantry(pantry, purchase.items));
+                    setImported((prev) => [...prev, purchase.key]);
+                    setPurchase(null);
                     toast(t.pantry.fromCartDone);
                   } catch {
                     toast(t.pantry.saveFailed);

@@ -34,6 +34,9 @@ export function usePlan() {
     setGenerating(true);
     setError(null);
     setDraft(null);
+    // Days that arrived before a failure are already persisted server-side;
+    // declared out here so a thrown read still reaches the sync below.
+    let landed = 0;
     try {
       // The plan starts today in the user's timezone — tell the server
       // which local date that is.
@@ -51,8 +54,6 @@ export function usePlan() {
       const decoder = new TextDecoder();
       let buffer = '';
       let finished = false;
-      // Days that arrived before a failure are already persisted server-side.
-      let landed = 0;
 
       // NDJSON: complete lines are events, the tail stays buffered.
       while (!finished) {

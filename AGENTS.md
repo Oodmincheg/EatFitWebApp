@@ -31,7 +31,9 @@ Before pushing: typecheck, lint, test, build, all four green.
 ## Code conventions
 
 - TypeScript strict. zod at every boundary: request bodies, model output, MCP tool
-  results. Types come from `z.infer`, not hand-written twins.
+  results, the generate-plan stream (`PlanStreamEventSchema`) and the session payload
+  the client reads back (`SessionPayloadSchema`). Types come from `z.infer`, not
+  hand-written twins.
 - Server-only modules start with `import 'server-only'` (`lib/llm.ts`, `lib/silpo/*`,
   `lib/session.ts`, `lib/i18n/server.ts`). Tests mock it: `vi.mock('server-only', () => ({}))`.
 - API routes follow one shape: `getUid()` → 401 `no_session`; `readJsonBody()` →

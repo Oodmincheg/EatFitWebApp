@@ -148,6 +148,17 @@ when a count meets a weight. The cart hands over the lines it actually committed
 sized from the product (kg for weighed goods, pack contents × quantity otherwise),
 so unmatched and excluded rows never reach the pantry.
 
+## 2026-09-10 · An accepted Silpo write is not proof of what was bought
+
+The cart writes through `silpo_add_or_update_cart_products`, which answers 200 and then
+reports per-line problems in `validations` — `product.offer.stock.max` means the quantity
+was trimmed. Feeding the requested quantities into the pantry after that would mark food
+as at home that nobody has. So an error-level validation blocks the pantry import
+entirely, and what does get imported is sized from the product itself: kilograms for
+weighed goods, the pack's whole stated content times the number of packs otherwise
+(`purchasedPantryItem`, sharing `parseDisplayRatio` with the matching code, which already
+understood `10шт` and `5*80г/уп`). One commit can be imported once.
+
 ## 2026-09-09 · Regeneration checks its own output
 
 Two failure modes were visible as soon as the flow was used in anger: "replace this meal"

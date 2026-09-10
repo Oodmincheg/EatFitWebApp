@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { fromDictionary, parseDisplayRatio, parsePicks, suggestQuantity } from './match';
+import { fromDictionary, parsePicks, suggestQuantity } from './match';
+import { parseDisplayRatio, purchasedPantryItem } from './packSize';
 
 describe('fromDictionary', () => {
   it('maps exact and partial English names to Ukrainian queries', () => {
@@ -23,6 +24,48 @@ describe('parseDisplayRatio', () => {
     expect(parseDisplayRatio('10шт')).toEqual({ count: 10 });
     expect(parseDisplayRatio(null)).toEqual({});
     expect(parseDisplayRatio('100г')).toEqual({ grams: 100 });
+  });
+});
+
+describe('purchasedPantryItem', () => {
+  const pack = (displayRatio: string | null) => ({ weighted: false, displayRatio });
+
+  it('orders weighted goods in kilograms', () => {
+    expect(purchasedPantryItem('лосось', { weighted: true, displayRatio: null }, 0.55)).toEqual({
+      name: 'лосось',
+      amount: 0.55,
+      unit: 'kg',
+    });
+  });
+
+  it('multiplies the whole pack content by the number of packs', () => {
+    expect(purchasedPantryItem('молоко', pack('900мл'), 2)).toEqual({
+      name: 'молоко',
+      amount: 1800,
+      unit: 'g',
+    });
+    // a multipack is one unit: 5*80 g each, two units bought
+    expect(purchasedPantryItem('печиво', pack('5*80г/уп'), 2)).toEqual({
+      name: 'печиво',
+      amount: 800,
+      unit: 'g',
+    });
+  });
+
+  it('counts the pieces inside a pack, not the packs', () => {
+    expect(purchasedPantryItem('яйця', pack('10шт'), 2)).toEqual({
+      name: 'яйця',
+      amount: 20,
+      unit: 'pc',
+    });
+  });
+
+  it('falls back to packs when the content cannot be read', () => {
+    expect(purchasedPantryItem('спеції', pack(null), 3)).toEqual({
+      name: 'спеції',
+      amount: 3,
+      unit: 'pc',
+    });
   });
 });
 
