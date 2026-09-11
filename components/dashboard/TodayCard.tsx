@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { AddFoodModal } from '@/components/dashboard/AddFoodModal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -36,7 +37,9 @@ function dayMacros(day: DayPlan) {
 }
 
 // Today's meals with eaten check-offs, food logged off the plan, and a kcal
-// progress bar vs target that counts both.
+// progress bar vs target that counts both. `day` is null when today falls
+// outside the plan's window; extras are logged against the date, not the plan,
+// so they stay available.
 export function TodayCard({
   day,
   target,
@@ -47,7 +50,7 @@ export function TodayCard({
   onRemoveExtra,
   onEstimateExtra,
 }: {
-  day: DayPlan;
+  day: DayPlan | null;
   target: number;
   eaten: MealSlot[];
   extras: EatenExtra[];
@@ -59,12 +62,12 @@ export function TodayCard({
   const { t } = useI18n();
   const toast = useToast();
   const [adding, setAdding] = useState(false);
-  const slots = daySlots(day);
+  const slots = day ? daySlots(day) : [];
   const total = eatenKcal(day, eaten, extras);
   const pct = Math.min(100, Math.round((total / target) * 100));
   const over = total > target;
-  const allDone = slots.every((slot) => eaten.includes(slot));
-  const macros = dayMacros(day);
+  const allDone = slots.length > 0 && slots.every((slot) => eaten.includes(slot));
+  const macros = day ? dayMacros(day) : null;
 
   const removeExtra = async (id: string) => {
     try {
@@ -88,7 +91,7 @@ export function TodayCard({
 
       <div
         role="progressbar"
-        aria-valuenow={total}
+        aria-valuenow={Math.min(total, target)}
         aria-valuemin={0}
         aria-valuemax={target}
         aria-label={t.today.eatenAria}
@@ -106,48 +109,64 @@ export function TodayCard({
         </p>
       )}
 
-      <ul className="mt-5 flex flex-col gap-2.5">
-        {slots.map((slot) => {
-          const meal = day.meals[slot]!;
-          const isEaten = eaten.includes(slot);
-          const weight = formatWeight(mealWeight(meal), t.units);
-          return (
-            <li key={slot}>
-              <label
-                className={`flex cursor-pointer items-center gap-3.5 rounded-2xl border-2 px-4 py-3 transition-colors ${
-                  isEaten
-                    ? 'border-lime bg-mint'
-                    : 'border-peach-line bg-cream hover:border-sand'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isEaten}
-                  onChange={(e) => onToggle(slot, e.target.checked)}
-                  className="h-5 w-5 shrink-0 accent-lime-deep"
-                  aria-label={t.today.markEaten(t.meals[slot])}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className={`block text-[10px] font-bold tracking-wide ${SLOT_ACCENT[slot]}`}>
-                    {t.mealLabels[slot]}
+      {day ? (
+        <ul className="mt-5 flex flex-col gap-2.5">
+          {slots.map((slot) => {
+            const meal = day.meals[slot]!;
+            const isEaten = eaten.includes(slot);
+            const weight = formatWeight(mealWeight(meal), t.units);
+            return (
+              <li key={slot}>
+                <label
+                  className={`flex cursor-pointer items-center gap-3.5 rounded-2xl border-2 px-4 py-3 transition-colors ${
+                    isEaten
+                      ? 'border-lime bg-mint'
+                      : 'border-peach-line bg-cream hover:border-sand'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isEaten}
+                    onChange={(e) => onToggle(slot, e.target.checked)}
+                    className="h-5 w-5 shrink-0 accent-lime-deep"
+                    aria-label={t.today.markEaten(t.meals[slot])}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className={`block text-[10px] font-bold tracking-wide ${SLOT_ACCENT[slot]}`}>
+                      {t.mealLabels[slot]}
+                    </span>
+                    <span
+                      className={`block text-sm font-semibold leading-tight ${
+                        isEaten ? 'text-latte line-through decoration-2' : ''
+                      }`}
+                    >
+                      {meal.name}
+                    </span>
                   </span>
-                  <span
-                    className={`block text-sm font-semibold leading-tight ${
-                      isEaten ? 'text-latte line-through decoration-2' : ''
-                    }`}
-                  >
-                    {meal.name}
+                  <span className="shrink-0 font-mono text-xs font-bold text-sand">
+                    {meal.kcal} {t.units.kcal}
+                    {weight && <span className="text-sand/70"> · {weight}</span>}
                   </span>
-                </span>
-                <span className="shrink-0 font-mono text-xs font-bold text-sand">
-                  {meal.kcal} {t.units.kcal}
-                  {weight && <span className="text-sand/70"> · {weight}</span>}
-                </span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="mt-5 rounded-2xl border-2 border-dashed border-sand py-12 text-center">
+          <p className="text-3xl" aria-hidden="true">
+            🍽️
+          </p>
+          <p className="mt-3 font-display text-lg font-extrabold">{t.today.noPlan}</p>
+          <p className="mt-1 text-sm text-latte">{t.today.noPlanText}</p>
+          <Link
+            href="/dashboard/plan"
+            className="mt-4 inline-block rounded-full bg-tomato px-5 py-2.5 text-sm font-bold text-white shadow-[0_4px_0_var(--color-tomato-deep)] hover:bg-tomato-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato"
+          >
+            {t.today.goToPlan}
+          </Link>
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[11px] font-bold tracking-widest text-latte">{t.today.extrasTitle}</h3>
@@ -175,7 +194,7 @@ export function TodayCard({
                   )}
                 </span>
                 <span className="shrink-0 font-mono text-xs font-bold text-sand">
-                  {extra.kcal} {t.units.kcal}
+                  {extra.kcal.toLocaleString(t.intl)} {t.units.kcal}
                 </span>
                 <button
                   type="button"

@@ -7,7 +7,9 @@ import type { DayProgress, EatenExtra, EatenExtraInput, ExtraEstimate, MealSlot 
 // Progress keyed by local date for the given date range — defaults to the
 // current calendar week (Mon–Sun). Toggles are optimistic and rolled back
 // if the server rejects them; extras wait for the server, since their id
-// is minted there.
+// is minted there. Each response writes back only the half it can have
+// changed: a toggle response read the document before a concurrent extras
+// write committed, so applying its `extras` would undo that write.
 export function useProgress(range?: { from: string; to: string }) {
   const [byDate, setByDate] = useState<Record<string, MealSlot[]>>({});
   const [extrasByDate, setExtrasByDate] = useState<Record<string, EatenExtra[]>>({});
@@ -17,8 +19,7 @@ export function useProgress(range?: { from: string; to: string }) {
   const from = range?.from ?? dateKey(monday);
   const to = range?.to ?? dateKey(addDays(monday, 6));
 
-  const applyDay = useCallback((day: DayProgress) => {
-    setByDate((prev) => ({ ...prev, [day.date]: day.eaten }));
+  const applyExtras = useCallback((day: DayProgress) => {
     setExtrasByDate((prev) => ({ ...prev, [day.date]: day.extras ?? [] }));
   }, []);
 
@@ -57,7 +58,7 @@ export function useProgress(range?: { from: string; to: string }) {
         });
         if (!res.ok) throw new Error('toggle_failed');
         const data: { day: DayProgress } = await res.json();
-        applyDay(data.day);
+        setByDate((prev) => ({ ...prev, [date]: data.day.eaten }));
       } catch {
         // Roll back the optimistic flip.
         setByDate((prev) => {
@@ -69,7 +70,7 @@ export function useProgress(range?: { from: string; to: string }) {
         });
       }
     },
-    [applyDay]
+    []
   );
 
   const addExtra = useCallback(
@@ -81,9 +82,9 @@ export function useProgress(range?: { from: string; to: string }) {
       });
       if (!res.ok) throw new Error('add_extra_failed');
       const data: { day: DayProgress } = await res.json();
-      applyDay(data.day);
+      applyExtras(data.day);
     },
-    [applyDay]
+    [applyExtras]
   );
 
   const removeExtra = useCallback(
@@ -98,13 +99,13 @@ export function useProgress(range?: { from: string; to: string }) {
         });
         if (!res.ok) throw new Error('remove_extra_failed');
         const data: { day: DayProgress } = await res.json();
-        applyDay(data.day);
+        applyExtras(data.day);
       } catch {
         setExtrasByDate((prev) => ({ ...prev, [date]: before }));
         throw new Error('remove_extra_failed');
       }
     },
-    [applyDay, extrasByDate]
+    [applyExtras, extrasByDate]
   );
 
   const estimateExtra = useCallback(async (text: string): Promise<ExtraEstimate> => {

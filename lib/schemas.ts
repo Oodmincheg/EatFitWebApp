@@ -291,12 +291,17 @@ export const PinBodySchema = z.object({
 
 // Food eaten outside the plan (a banana between breakfast and lunch). It
 // counts toward the day's kcal but is not a slot, so it never touches `eaten`.
+// The bounds are shared with ExtraEstimateSchema: an estimate the model returns
+// has to be storable, or the user is left with a form that can never save.
+const EXTRA_MAX_KCAL = 5000;
+const EXTRA_MAX_MACRO_G = 1000;
+
 export const EatenExtraInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  kcal: z.number().nonnegative().max(5000),
-  protein_g: z.number().nonnegative().max(1000).optional(),
-  fat_g: z.number().nonnegative().max(1000).optional(),
-  carbs_g: z.number().nonnegative().max(1000).optional(),
+  kcal: z.number().nonnegative().max(EXTRA_MAX_KCAL),
+  protein_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G).optional(),
+  fat_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G).optional(),
+  carbs_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G).optional(),
 });
 export type EatenExtraInput = z.infer<typeof EatenExtraInputSchema>;
 
@@ -335,10 +340,10 @@ export const EstimateExtraBodySchema = z.object({
 });
 export const ExtraEstimateSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  kcal: z.number().nonnegative(),
-  protein_g: z.number().nonnegative(),
-  fat_g: z.number().nonnegative(),
-  carbs_g: z.number().nonnegative(),
+  kcal: z.number().nonnegative().max(EXTRA_MAX_KCAL),
+  protein_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G),
+  fat_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G),
+  carbs_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G),
 });
 export type ExtraEstimate = z.infer<typeof ExtraEstimateSchema>;
 

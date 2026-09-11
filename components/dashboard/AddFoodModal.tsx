@@ -4,18 +4,8 @@ import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
+import { num, optNum } from '@/lib/num';
 import type { EatenExtraInput, ExtraEstimate } from '@/lib/schemas';
-
-// "1,5" and "1.5" both read as 1.5; anything else is 0.
-function num(s: string): number {
-  const n = Number(s.replace(',', '.'));
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
-// Blank stays undefined so an extra without macros is stored without them.
-function optNum(s: string): number | undefined {
-  return s.trim() === '' ? undefined : num(s);
-}
 
 const inputCls =
   'rounded-xl border-2 border-peach-line bg-paper px-3 py-2 text-sm font-medium focus:border-ink focus:outline-none';

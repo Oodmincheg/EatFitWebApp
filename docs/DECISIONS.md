@@ -136,9 +136,12 @@ would have leaked into everything keyed by `MealSlot` (the strip, the week view,
 prompt). Instead the progress document grows an `extras` array beside `eaten`: each entry
 has a server-minted id, a name, kcal and optional macros, and only `eatenKcal` adds the two
 together. The strip and history keep counting slots. Extras are logged for the local date
-they were added on and survive a plan regeneration, since they never referenced the plan.
+they were added on and survive a plan regeneration, since they never referenced the plan —
+so the today card renders with a null day too, showing the no-plan notice where the meal
+list would be rather than replacing the whole card and hiding the extras with it.
 The model estimate is a convenience over the same form: the numbers land in editable fields
-and the entry is saved as typed.
+and the entry is saved as typed, and it is bounded by the same limits the save accepts so an
+estimate can never produce a form that refuses to save.
 
 ## 2026-09-10 · The pantry is the only source of the fridge list
 

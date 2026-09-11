@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { TodayCard } from '@/components/dashboard/TodayCard';
 import { WeekStrip } from '@/components/dashboard/WeekStrip';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -55,32 +54,18 @@ export default function TodayPage() {
             </div>
           </section>
 
-          {todayPlan ? (
-            <TodayCard
-              day={todayPlan}
-              target={profile.calorieTarget}
-              eaten={byDate[todayKey] ?? []}
-              extras={extrasByDate[todayKey] ?? []}
-              onToggle={(slot, eaten) => toggle(todayKey, slot, eaten)}
-              onAddExtra={(input) => addExtra(todayKey, input)}
-              onRemoveExtra={(id) => removeExtra(todayKey, id)}
-              onEstimateExtra={estimateExtra}
-            />
-          ) : (
-            <div className="rounded-3xl border-2 border-dashed border-sand py-16 text-center">
-              <p className="text-3xl" aria-hidden="true">
-                🍽️
-              </p>
-              <p className="mt-3 font-display text-lg font-extrabold">{t.today.noPlan}</p>
-              <p className="mt-1 text-sm text-latte">{t.today.noPlanText}</p>
-              <Link
-                href="/dashboard/plan"
-                className="mt-4 inline-block rounded-full bg-tomato px-5 py-2.5 text-sm font-bold text-white shadow-[0_4px_0_var(--color-tomato-deep)] hover:bg-tomato-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato"
-              >
-                {t.today.goToPlan}
-              </Link>
-            </div>
-          )}
+          {/* Rendered with `day` null outside the plan's window too: extras are
+              logged against the date, so they must stay reachable without a plan. */}
+          <TodayCard
+            day={todayPlan ?? null}
+            target={profile.calorieTarget}
+            eaten={byDate[todayKey] ?? []}
+            extras={extrasByDate[todayKey] ?? []}
+            onToggle={(slot, eaten) => toggle(todayKey, slot, eaten)}
+            onAddExtra={(input) => addExtra(todayKey, input)}
+            onRemoveExtra={(id) => removeExtra(todayKey, id)}
+            onEstimateExtra={estimateExtra}
+          />
         </>
       )}
     </>

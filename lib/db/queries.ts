@@ -242,6 +242,11 @@ export async function toggleProgress(
   return toDayProgress(doc ?? { date, eaten: eaten ? [slot] : [], extras: [] });
 }
 
+// The day's extras share one document with its check-offs, so the array is
+// capped rather than left to grow: a document that outgrows Mongo's 16 MB limit
+// would take meal toggles for that date down with it.
+const MAX_EXTRAS_PER_DAY = 100;
+
 export async function addProgressExtra(
   uid: string,
   date: string,
@@ -250,7 +255,10 @@ export async function addProgressExtra(
   const extra: EatenExtra = { ...input, id: new ObjectId().toHexString(), loggedAt: new Date().toISOString() };
   const doc = await (await progress()).findOneAndUpdate(
     { _id: `${uid}:${date}` },
-    { $push: { extras: extra }, $setOnInsert: { userId: uid, date, eaten: [] } },
+    {
+      $push: { extras: { $each: [extra], $slice: -MAX_EXTRAS_PER_DAY } },
+      $setOnInsert: { userId: uid, date, eaten: [] },
+    },
     { upsert: true, returnDocument: 'after' }
   );
   return toDayProgress(doc ?? { date, eaten: [], extras: [extra] });
