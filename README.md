@@ -81,7 +81,8 @@ signs in on silpo.ua from the Cart page.
   day's free slots, and hands it on. Days stream back to the browser as NDJSON
   (`start` / `day` / `done` / `error`) and the plan document is rewritten after each one,
   so an interrupted run leaves a shorter valid plan. A day whose recomputed total misses
-  the target costs one small repair call, and usually costs none.
+  the target costs one small repair call — one per such day, and usually none at all;
+  a repair that fails leaves that day as generated rather than failing the plan.
   Every total is recomputed server-side, and the client validates each streamed event
   against `PlanStreamEventSchema` before it touches state; a run that fails partway
   leaves the session on the persisted partial plan rather than the previous one.
