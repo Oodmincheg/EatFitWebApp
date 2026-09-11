@@ -14,7 +14,7 @@ import { daySlots } from '@/lib/schemas';
 export default function TodayPage() {
   const { t } = useI18n();
   const { profile, plan } = useSession();
-  const { byDate, loading, toggle } = useProgress();
+  const { byDate, extrasByDate, loading, toggle, addExtra, removeExtra, estimateExtra } = useProgress();
 
   // Layout guards guarantee a profile before this renders.
   if (!profile) return null;
@@ -60,7 +60,11 @@ export default function TodayPage() {
               day={todayPlan}
               target={profile.calorieTarget}
               eaten={byDate[todayKey] ?? []}
+              extras={extrasByDate[todayKey] ?? []}
               onToggle={(slot, eaten) => toggle(todayKey, slot, eaten)}
+              onAddExtra={(input) => addExtra(todayKey, input)}
+              onRemoveExtra={(id) => removeExtra(todayKey, id)}
+              onEstimateExtra={estimateExtra}
             />
           ) : (
             <div className="rounded-3xl border-2 border-dashed border-sand py-16 text-center">

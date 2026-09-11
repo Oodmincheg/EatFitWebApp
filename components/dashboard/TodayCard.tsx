@@ -1,8 +1,21 @@
 'use client';
 
+import { useState } from 'react';
+import { AddFoodModal } from '@/components/dashboard/AddFoodModal';
+import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
 import { useI18n } from '@/hooks/useI18n';
+import { eatenKcal } from '@/lib/progress';
 import { formatWeight } from '@/lib/shopping';
-import { daySlots, type DayPlan, type Meal, type MealSlot } from '@/lib/schemas';
+import {
+  daySlots,
+  type DayPlan,
+  type EatenExtra,
+  type EatenExtraInput,
+  type ExtraEstimate,
+  type Meal,
+  type MealSlot,
+} from '@/lib/schemas';
 
 const SLOT_ACCENT: Record<MealSlot, string> = {
   breakfast: 'text-tomato',
@@ -22,26 +35,44 @@ function dayMacros(day: DayPlan) {
   return p != null && f != null && c != null ? { p, f, c } : null;
 }
 
-// Today's meals with eaten check-offs and a kcal progress bar vs target.
+// Today's meals with eaten check-offs, food logged off the plan, and a kcal
+// progress bar vs target that counts both.
 export function TodayCard({
   day,
   target,
   eaten,
+  extras,
   onToggle,
+  onAddExtra,
+  onRemoveExtra,
+  onEstimateExtra,
 }: {
   day: DayPlan;
   target: number;
   eaten: MealSlot[];
+  extras: EatenExtra[];
   onToggle: (slot: MealSlot, eaten: boolean) => void;
+  onAddExtra: (input: EatenExtraInput) => Promise<void>;
+  onRemoveExtra: (id: string) => Promise<void>;
+  onEstimateExtra: (text: string) => Promise<ExtraEstimate>;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
+  const [adding, setAdding] = useState(false);
   const slots = daySlots(day);
-  const eatenKcal = slots
-    .filter((slot) => eaten.includes(slot))
-    .reduce((sum, slot) => sum + day.meals[slot]!.kcal, 0);
-  const pct = Math.min(100, Math.round((eatenKcal / target) * 100));
+  const total = eatenKcal(day, eaten, extras);
+  const pct = Math.min(100, Math.round((total / target) * 100));
+  const over = total > target;
   const allDone = slots.every((slot) => eaten.includes(slot));
   const macros = dayMacros(day);
+
+  const removeExtra = async (id: string) => {
+    try {
+      await onRemoveExtra(id);
+    } catch {
+      toast(t.today.removeExtraFailed);
+    }
+  };
 
   return (
     <section className="rounded-3xl border-2 border-ink bg-paper p-5 sm:p-6">
@@ -50,21 +81,21 @@ export function TodayCard({
           {allDone ? t.today.allDone : t.today.mealsTitle}
         </h2>
         <p className="font-mono text-sm font-bold text-latte">
-          <span className="text-ink">{eatenKcal.toLocaleString(t.intl)}</span> /{' '}
+          <span className={over ? 'text-tomato' : 'text-ink'}>{total.toLocaleString(t.intl)}</span> /{' '}
           {target.toLocaleString(t.intl)} {t.units.kcal}
         </p>
       </div>
 
       <div
         role="progressbar"
-        aria-valuenow={eatenKcal}
+        aria-valuenow={total}
         aria-valuemin={0}
         aria-valuemax={target}
         aria-label={t.today.eatenAria}
         className="mt-3 h-3 overflow-hidden rounded-full border-2 border-ink bg-cream"
       >
         <div
-          className="h-full rounded-full bg-lime transition-[width] duration-500"
+          className={`h-full rounded-full transition-[width] duration-500 ${over ? 'bg-tomato' : 'bg-lime'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -117,6 +148,58 @@ export function TodayCard({
           );
         })}
       </ul>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[11px] font-bold tracking-widest text-latte">{t.today.extrasTitle}</h3>
+        <Button variant="secondary" onClick={() => setAdding(true)} className="px-3 py-1.5 text-xs">
+          {t.today.addFood}
+        </Button>
+      </div>
+
+      {extras.length > 0 && (
+        <ul className="mt-2.5 flex flex-col gap-2">
+          {extras.map((extra) => {
+            const hasMacros =
+              extra.protein_g != null && extra.fat_g != null && extra.carbs_g != null;
+            return (
+              <li
+                key={extra.id}
+                className="flex items-center gap-3.5 rounded-2xl border-2 border-dashed border-sand bg-cream px-4 py-2.5"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold leading-tight">{extra.name}</span>
+                  {hasMacros && (
+                    <span className="block font-mono text-[10px] font-bold text-latte">
+                      {t.today.extraMacros(extra.protein_g!, extra.fat_g!, extra.carbs_g!)}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 font-mono text-xs font-bold text-sand">
+                  {extra.kcal} {t.units.kcal}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeExtra(extra.id)}
+                  aria-label={t.today.removeExtra(extra.name)}
+                  className="h-8 w-8 shrink-0 rounded-full text-sm font-bold text-latte hover:bg-paper hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato"
+                >
+                  ✕
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <AddFoodModal
+        open={adding}
+        onSave={async (input) => {
+          await onAddExtra(input);
+          setAdding(false);
+        }}
+        onEstimate={onEstimateExtra}
+        onClose={() => setAdding(false)}
+      />
     </section>
   );
 }

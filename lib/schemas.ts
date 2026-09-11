@@ -289,9 +289,28 @@ export const PinBodySchema = z.object({
   today: DateKeySchema.optional(),
 });
 
+// Food eaten outside the plan (a banana between breakfast and lunch). It
+// counts toward the day's kcal but is not a slot, so it never touches `eaten`.
+export const EatenExtraInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  kcal: z.number().nonnegative().max(5000),
+  protein_g: z.number().nonnegative().max(1000).optional(),
+  fat_g: z.number().nonnegative().max(1000).optional(),
+  carbs_g: z.number().nonnegative().max(1000).optional(),
+});
+export type EatenExtraInput = z.infer<typeof EatenExtraInputSchema>;
+
+export const EatenExtraSchema = EatenExtraInputSchema.extend({
+  id: z.string().min(1),
+  loggedAt: z.string(),
+});
+export type EatenExtra = z.infer<typeof EatenExtraSchema>;
+
 export const DayProgressSchema = z.object({
   date: DateKeySchema,
   eaten: z.array(MealSlotSchema),
+  // Absent on documents written before extras existed.
+  extras: z.array(EatenExtraSchema).default([]),
 });
 export type DayProgress = z.infer<typeof DayProgressSchema>;
 
@@ -300,6 +319,28 @@ export const ToggleProgressBodySchema = z.object({
   slot: MealSlotSchema,
   eaten: z.boolean(),
 });
+
+export const AddExtraBodySchema = EatenExtraInputSchema.extend({
+  date: DateKeySchema,
+});
+
+export const RemoveExtraBodySchema = z.object({
+  date: DateKeySchema,
+  id: z.string().min(1),
+});
+
+// Free text of what was eaten ("a banana and a latte") → name and nutrition.
+export const EstimateExtraBodySchema = z.object({
+  text: z.string().trim().min(1).max(300),
+});
+export const ExtraEstimateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  kcal: z.number().nonnegative(),
+  protein_g: z.number().nonnegative(),
+  fat_g: z.number().nonnegative(),
+  carbs_g: z.number().nonnegative(),
+});
+export type ExtraEstimate = z.infer<typeof ExtraEstimateSchema>;
 
 // ── Grocery orders (cart status lifecycle) ──────────────────
 export const OrderStatusSchema = z.enum(['ordered', 'delivered']);
