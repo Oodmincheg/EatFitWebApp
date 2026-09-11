@@ -289,9 +289,33 @@ export const PinBodySchema = z.object({
   today: DateKeySchema.optional(),
 });
 
+// Food eaten outside the plan (a banana between breakfast and lunch). It
+// counts toward the day's kcal but is not a slot, so it never touches `eaten`.
+// The bounds are shared with ExtraEstimateSchema: an estimate the model returns
+// has to be storable, or the user is left with a form that can never save.
+const EXTRA_MAX_KCAL = 5000;
+const EXTRA_MAX_MACRO_G = 1000;
+
+export const EatenExtraInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  kcal: z.number().nonnegative().max(EXTRA_MAX_KCAL),
+  protein_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G).optional(),
+  fat_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G).optional(),
+  carbs_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G).optional(),
+});
+export type EatenExtraInput = z.infer<typeof EatenExtraInputSchema>;
+
+export const EatenExtraSchema = EatenExtraInputSchema.extend({
+  id: z.string().min(1),
+  loggedAt: z.string(),
+});
+export type EatenExtra = z.infer<typeof EatenExtraSchema>;
+
 export const DayProgressSchema = z.object({
   date: DateKeySchema,
   eaten: z.array(MealSlotSchema),
+  // Absent on documents written before extras existed.
+  extras: z.array(EatenExtraSchema).default([]),
 });
 export type DayProgress = z.infer<typeof DayProgressSchema>;
 
@@ -300,6 +324,28 @@ export const ToggleProgressBodySchema = z.object({
   slot: MealSlotSchema,
   eaten: z.boolean(),
 });
+
+export const AddExtraBodySchema = EatenExtraInputSchema.extend({
+  date: DateKeySchema,
+});
+
+export const RemoveExtraBodySchema = z.object({
+  date: DateKeySchema,
+  id: z.string().min(1),
+});
+
+// Free text of what was eaten ("a banana and a latte") → name and nutrition.
+export const EstimateExtraBodySchema = z.object({
+  text: z.string().trim().min(1).max(300),
+});
+export const ExtraEstimateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  kcal: z.number().nonnegative().max(EXTRA_MAX_KCAL),
+  protein_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G),
+  fat_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G),
+  carbs_g: z.number().nonnegative().max(EXTRA_MAX_MACRO_G),
+});
+export type ExtraEstimate = z.infer<typeof ExtraEstimateSchema>;
 
 // ── Grocery orders (cart status lifecycle) ──────────────────
 export const OrderStatusSchema = z.enum(['ordered', 'delivered']);

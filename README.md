@@ -26,7 +26,9 @@ due 2026-09-14 23:59 Kyiv, video pitch mandatory).
 7. Silpo cart: the list is matched against Silpo's live catalog through Silpo's official
    MCP server, reviewed with real prices and pack sizes, then written into the user's
    Silpo cart. Payment happens on silpo.ua (the MCP has no order-placement tool).
-8. Daily check-off of eaten meals, plan history.
+8. Daily check-off of eaten meals, plus anything eaten off the plan (a banana between
+   breakfast and lunch), described in free text and priced in kcal by the model or typed by
+   hand; both count toward the day's bar. Plan history.
 
 ## Stack
 
@@ -117,6 +119,11 @@ signs in on silpo.ua from the Cart page.
   `safeParse` → 400 with issues, then a try/catch mapping domain errors to
   snake_case codes (`generation_failed` 422, `upstream_error` 502, `silpo_unlinked` 401,
   `no_cart` 409, `server_error` 500).
+- Progress is one `progress` document per user per local date: `eaten` holds the checked-off
+  slots (`PUT /api/progress`), `extras` the off-plan food (`POST`/`DELETE
+  /api/progress/extras`, each entry with its own id and kcal, macros optional).
+  `POST /api/progress/extras/estimate` turns a free-text description into a name and
+  nutrition in the UI locale. `eatenKcal` in `lib/progress.ts` sums both for today's bar.
 
 Data lives in seven collections: `users` (profile and pins embedded), `plans`,
 `progress`, `orders`, `dishes`, `silpo_oauth` (per-user MCP tokens), `silpo_clients`

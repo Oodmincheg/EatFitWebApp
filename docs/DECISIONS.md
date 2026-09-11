@@ -128,6 +128,21 @@ about weight and so covers the item outright. The page saves as you type: an exp
 button left people with a pantry that looked edited while everything else still read the
 old one.
 
+## 2026-09-11 · Off-plan food is a list on the day, not a fake slot
+
+The today bar only knew the plan's slots, so a snack between meals was invisible unless the
+user lied and ticked a meal they had not eaten. Modelling extras as an ad-hoc sixth slot
+would have leaked into everything keyed by `MealSlot` (the strip, the week view, the
+prompt). Instead the progress document grows an `extras` array beside `eaten`: each entry
+has a server-minted id, a name, kcal and optional macros, and only `eatenKcal` adds the two
+together. The strip and history keep counting slots. Extras are logged for the local date
+they were added on and survive a plan regeneration, since they never referenced the plan —
+so the today card renders with a null day too, showing the no-plan notice where the meal
+list would be rather than replacing the whole card and hiding the extras with it.
+The model estimate is a convenience over the same form: the numbers land in editable fields
+and the entry is saved as typed, and it is bounded by the same limits the save accepts so an
+estimate can never produce a form that refuses to save.
+
 ## 2026-09-10 · The pantry is the only source of the fridge list
 
 The pre-generation dialog used to keep unconfirmed edits in sessionStorage so a half-typed

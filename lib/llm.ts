@@ -4,12 +4,14 @@ import {
   DAY_NAMES,
   DEFAULT_MEAL_SLOTS,
   DishEstimateSchema,
+  ExtraEstimateSchema,
   MealSlotSchema,
   ModelMealSchema,
   daySlots,
   type DayName,
   type DayPlan,
   type DishEstimate,
+  type ExtraEstimate,
   type Meal,
   type MealPlan,
   type MealSlot,
@@ -843,6 +845,35 @@ export async function estimateDish(
     },
   ]);
   return {
+    kcal: Math.round(est.kcal),
+    protein_g: Math.round(est.protein_g),
+    fat_g: Math.round(est.fat_g),
+    carbs_g: Math.round(est.carbs_g),
+  };
+}
+
+const EXTRA_NAME_RULE: Record<Locale, string> = {
+  uk: 'Write "name" in Ukrainian, short, e.g. "банан", "лате з молоком".',
+  en: 'Write "name" in English, short, e.g. "banana", "latte with milk".',
+};
+
+// Free text of something eaten off the plan → a short name and the nutrition
+// of the whole portion described (the user can still edit the numbers).
+export async function estimateEaten(text: string, locale: Locale): Promise<ExtraEstimate> {
+  const est = await completeJson(ExtraEstimateSchema, [
+    { role: 'system', content: SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content:
+        `A person ate this between meals: "${text}". ` +
+        'Estimate the nutrition of the whole portion described (not per 100 g); assume a typical ' +
+        'single serving when no amount is given. Return whole numbers consistent with 4 kcal per ' +
+        `gram of protein or carbs and 9 kcal per gram of fat. ${EXTRA_NAME_RULE[locale]} ` +
+        'Return JSON matching exactly: {"name":"","kcal":0,"protein_g":0,"fat_g":0,"carbs_g":0}',
+    },
+  ]);
+  return {
+    name: est.name,
     kcal: Math.round(est.kcal),
     protein_g: Math.round(est.protein_g),
     fat_g: Math.round(est.fat_g),

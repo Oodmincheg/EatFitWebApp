@@ -5,6 +5,8 @@ import {
   coerceStoredPlan,
   type DayName,
   type DayProgress,
+  type EatenExtra,
+  type EatenExtraInput,
   type Dish,
   type DishInput,
   type MealPlan,
@@ -50,6 +52,8 @@ export interface ProgressDoc {
   userId: string;
   date: string; // "YYYY-MM-DD" local date
   eaten: MealSlot[];
+  // Off-plan food logged that day; absent on documents written before it existed.
+  extras?: EatenExtra[];
 }
 
 export interface OrderDoc {
@@ -213,7 +217,11 @@ export async function listProgress(
     .find({ userId: uid, date: { $gte: from, $lte: to } })
     .sort({ date: 1 })
     .toArray();
-  return docs.map(({ date, eaten }) => ({ date, eaten }));
+  return docs.map(toDayProgress);
+}
+
+function toDayProgress(doc: Pick<ProgressDoc, 'date' | 'eaten' | 'extras'>): DayProgress {
+  return { date: doc.date, eaten: doc.eaten ?? [], extras: doc.extras ?? [] };
 }
 
 export async function toggleProgress(
@@ -231,7 +239,39 @@ export async function toggleProgress(
     { ...update, $setOnInsert: { userId: uid, date } },
     { upsert: true, returnDocument: 'after' }
   );
-  return { date, eaten: doc?.eaten ?? (eaten ? [slot] : []) };
+  return toDayProgress(doc ?? { date, eaten: eaten ? [slot] : [], extras: [] });
+}
+
+// The day's extras share one document with its check-offs, so the array is
+// capped rather than left to grow: a document that outgrows Mongo's 16 MB limit
+// would take meal toggles for that date down with it.
+const MAX_EXTRAS_PER_DAY = 100;
+
+export async function addProgressExtra(
+  uid: string,
+  date: string,
+  input: EatenExtraInput
+): Promise<DayProgress> {
+  const extra: EatenExtra = { ...input, id: new ObjectId().toHexString(), loggedAt: new Date().toISOString() };
+  const doc = await (await progress()).findOneAndUpdate(
+    { _id: `${uid}:${date}` },
+    {
+      $push: { extras: { $each: [extra], $slice: -MAX_EXTRAS_PER_DAY } },
+      $setOnInsert: { userId: uid, date, eaten: [] },
+    },
+    { upsert: true, returnDocument: 'after' }
+  );
+  return toDayProgress(doc ?? { date, eaten: [], extras: [extra] });
+}
+
+// Removing from a day that has no document is a no-op, not an upsert.
+export async function removeProgressExtra(uid: string, date: string, id: string): Promise<DayProgress> {
+  const doc = await (await progress()).findOneAndUpdate(
+    { _id: `${uid}:${date}` },
+    { $pull: { extras: { id } } },
+    { returnDocument: 'after' }
+  );
+  return toDayProgress(doc ?? { date, eaten: [], extras: [] });
 }
 
 // ── Orders ──────────────────────────────────────────────────

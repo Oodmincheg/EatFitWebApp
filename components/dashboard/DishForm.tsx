@@ -4,17 +4,12 @@ import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
+import { num } from '@/lib/num';
 import type { Dish, DishEstimate, DishInput } from '@/lib/schemas';
 
 type Row = { name: string; grams: string };
 
 const emptyRow = (): Row => ({ name: '', grams: '' });
-
-// "1,5" and "1.5" both read as 1.5; anything else is 0.
-function num(s: string): number {
-  const n = Number(s.replace(',', '.'));
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
 
 const inputCls =
   'rounded-xl border-2 border-peach-line bg-paper px-3 py-2 text-sm font-medium focus:border-ink focus:outline-none';
