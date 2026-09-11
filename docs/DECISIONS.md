@@ -178,6 +178,26 @@ white is a fixed accent; `ink` is the foreground in both themes, hence `ink-cont
 for the few elements that sit on top of it. The cookie is read in the root layout, so a
 pinned theme paints on the first frame.
 
+## 2026-09-10 · One request for the plan, read as it is written
+
+Generating a day per call made the wait long enough to notice: seven round trips, each
+re-sending the same prompt, for one week. The plan is one request again, but with
+`stream: true`, and `scanArrayObjects` lifts each finished day object out of the
+half-written JSON, so the week still fills in card by card — the property that made the
+per-day split worth trying in the first place. What was lost is the natural per-day
+retry, so a day whose server-recomputed total misses the target now costs one small
+repair call, which in practice is none. Endpoints that cannot stream fall back to a
+single plain completion parsed the same way.
+
+## 2026-09-11 · A day that fails the schema stops the answer
+
+Reading days out of a half-written response needs a rule for a day that does not
+validate. Skipping it is the worst option available: the scanner has already moved past
+it, so the next object silently takes the failed day's index and the plan quietly holds
+the wrong day in that slot. Parsing now halts for the whole answer, keeps the validation
+issue, and spends the one corrective attempt that AGENTS.md calls for; the retry is read
+from a fresh scanner, because a cursor belongs to the answer it was measuring.
+
 ## Open
 
 - Real token verification for Google sign-in (`firebase-admin` or Auth.js).

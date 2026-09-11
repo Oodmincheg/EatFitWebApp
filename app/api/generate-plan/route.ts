@@ -83,9 +83,15 @@ export async function POST(req: Request) {
           await getLocale(),
           pinned,
           async (index, day) => {
-            partial = partial
-              ? { ...partial, days: [...partial.days, day] }
-              : { generatedAt: new Date().toISOString(), startDate, days: [day] };
+            // Indexed, not appended: a repaired day arrives again under the
+            // index it already had.
+            const days = partial ? [...partial.days] : [];
+            days[index] = day;
+            partial = {
+              generatedAt: partial?.generatedAt ?? new Date().toISOString(),
+              startDate,
+              days,
+            };
             await savePlanDoc(uid, planId, partial);
             send({ type: 'day', index, day });
           }

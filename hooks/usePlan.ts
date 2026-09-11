@@ -83,7 +83,13 @@ export function usePlan() {
             setDraft({ startDate: event.startDate, totalDays: event.totalDays, days: [] });
           } else if (event.type === 'day') {
             landed += 1;
-            setDraft((prev) => (prev ? { ...prev, days: [...prev.days, event.day] } : prev));
+            setDraft((prev) => {
+              if (!prev) return prev;
+              // A repaired day comes back under the index it already had.
+              const days = [...prev.days];
+              days[event.index] = event.day;
+              return { ...prev, days };
+            });
           } else if (event.type === 'done') {
             setPlan(event.plan);
             landed = 0;
@@ -95,14 +101,13 @@ export function usePlan() {
         }
       }
       if (!finished) setError('network');
-      // A run that died after some days left a shorter plan in Mongo; adopt
-      // it, or the UI would keep showing the previous one while the server
-      // has already moved on.
-      if (landed > 0) await refresh();
-      if (!finished) setError('network');
     } catch {
       setError('network');
     } finally {
+      // A run that died after some days left a shorter plan in Mongo; adopt
+      // it, or the UI would keep showing the previous one while the server
+      // has already moved on. In `finally` so a thrown read reaches it too.
+      if (landed > 0) await refresh();
       setGenerating(false);
       setDraft(null);
     }

@@ -17,6 +17,7 @@ import {
   type Profile,
 } from './schemas';
 import { parseDateKey, weekdayName } from './dates';
+import { scanArrayObjects } from './streamJson';
 import type { Locale } from './i18n';
 import { freeSlots, withDayTotals, type PinnedDay, type PinnedWeek } from './pins';
 import { profilePlanDays, profileSlots } from './profile';
@@ -141,6 +142,93 @@ async function chatCompletion(messages: ChatMessage[]): Promise<string> {
   }
 }
 
+// Carries a handler's failure out of the stream unchanged: the outer catch
+// turns transport problems into UpstreamError, and a failed save must not be
+// mistaken for one.
+class StreamHandlerError extends Error {
+  constructor(readonly reason: unknown) {
+    super('stream handler failed');
+  }
+}
+
+// Same endpoint, `stream: true`: the caller sees text as it is written, which
+// is what lets a week-long completion render day by day. Returns the whole
+// text once the stream ends.
+async function chatCompletionStream(
+  messages: ChatMessage[],
+  onText: (full: string) => void | Promise<void>
+): Promise<string> {
+  const baseUrl = process.env.LITELLM_BASE_URL;
+  const apiKey = process.env.LITELLM_API_KEY;
+  const model = process.env.LITELLM_MODEL;
+  if (!baseUrl || !apiKey || !model) {
+    throw new UpstreamError('LiteLLM is not configured (LITELLM_* env vars)');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 180_000);
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        response_format: { type: 'json_object' },
+        stream: true,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) throw new UpstreamError(`LiteLLM responded ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let full = '';
+
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === '[DONE]') continue;
+        let delta: unknown;
+        try {
+          delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+        } catch {
+          // A keep-alive or a partial frame — the next chunk completes it.
+          continue;
+        }
+        // Outside the frame's catch on purpose: whatever the caller does with
+        // a finished day (persisting it, streaming it out) must surface, not
+        // read as a malformed frame.
+        if (typeof delta === 'string' && delta) {
+          full += delta;
+          try {
+            await onText(full);
+          } catch (e) {
+            throw new StreamHandlerError(e);
+          }
+        }
+      }
+    }
+
+    if (!full) throw new UpstreamError('empty completion');
+    return full;
+  } catch (err) {
+    if (err instanceof StreamHandlerError) throw err.reason;
+    if (err instanceof UpstreamError) throw err;
+    throw new UpstreamError(err instanceof Error ? err.message : 'fetch failed');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function stripJsonFence(s: string): string {
   return s
     .trim()
@@ -170,11 +258,15 @@ function tryParse<S extends z.ZodTypeAny>(
 // then give up (the route maps GenerationFailedError to 422).
 async function completeJson<S extends z.ZodTypeAny>(
   schema: S,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  // The plan's repair pass is budgeted at one call, so it opts out of the
+  // corrective retry rather than nesting another round trip inside it.
+  retryOnInvalid = true
 ): Promise<z.infer<S>> {
   const first = await chatCompletion(messages);
   let attempt = tryParse(schema, first);
   if (attempt.data !== undefined) return attempt.data;
+  if (!retryOnInvalid) throw new GenerationFailedError(attempt.issue ?? 'invalid model output');
 
   const retry = await chatCompletion([
     ...messages,
@@ -304,6 +396,49 @@ export async function parseFridgeImage(imageDataUrl: string, locale: Locale): Pr
   return [...new Set(result.data.items.map((s) => s.toLowerCase().trim()).filter(Boolean))];
 }
 
+// One line per day: which slots the user pinned and which to generate.
+function daySpec(day: DayName, pinned: PinnedDay | undefined, slots: MealSlot[]): string {
+  const free = freeSlots(pinned, slots);
+  const fixed = slots.filter((s) => pinned?.[s]).map((s) => `${s} ${describeFixed(pinned![s]!)}`);
+  if (free.length === 0) {
+    return `- ${day}: every meal is fixed by the user (${fixed.join('; ')}). Return "meals": {} for this day.`;
+  }
+  if (fixed.length === 0) return `- ${day}: generate ${free.join(', ')}.`;
+  return (
+    `- ${day}: fixed by the user: ${fixed.join('; ')}. Generate ${free.join(', ')} so the day ` +
+    `total including the fixed meals lands within ±10% of the target.`
+  );
+}
+
+// The whole plan in one request: cheaper and faster than a call per day, and
+// the answer is streamed, so days still appear one at a time.
+function weekPrompt(
+  profile: Profile,
+  days: DayName[],
+  slots: MealSlot[],
+  locale: Locale,
+  pinnedByIndex: (PinnedDay | undefined)[]
+): string {
+  const specs = days.map((d, i) => daySpec(d, pinnedByIndex[i], slots)).join('\n');
+  const example = days
+    .map((d, i) => `{"day":"${d}","meals":${mealsJson(freeSlots(pinnedByIndex[i], slots))}}`)
+    .join(',');
+  return (
+    LANGUAGE_RULE[locale] +
+    `Create a ${days.length}-day meal plan starting on ${days[0]} ` +
+    `(${days.length} consecutive days: ${days[0]} through ${days[days.length - 1]}), ` +
+    `${slots.length} meals per day (${slotList(slots)}), targeting ${profile.calorieTarget} kcal/day ` +
+    `(each day within ±10%). ` +
+    (slots.some((s) => s.endsWith('snack')) ? SNACK_RULE : '') +
+    profileContext(profile) +
+    `Some slots already hold the user's own dishes; never change or repeat them, and generate only the requested slots:\n${specs}\n` +
+    'Never repeat a meal across the plan. ' +
+    MEAL_FIELDS_RULE +
+    `Return JSON with exactly ${days.length} day objects in this order and only the requested meal keys per day, ` +
+    `matching exactly: {"days":[${example}]} where <meal> is ${MEAL_JSON}`
+  );
+}
+
 // Day names of a plan of `count` days starting on `startDate`.
 export function planDayNames(startDate: string, count: number): DayName[] {
   const startIdx = DAY_NAMES.indexOf(weekdayName(parseDateKey(startDate)));
@@ -369,6 +504,9 @@ export async function generatePlanDay(opts: {
   pinnedDay?: PinnedDay;
   avoid?: string[];
   preference?: string;
+  // One call, no schema retry and no second attempt at the target: used by
+  // the plan repair pass, whose whole budget is that single call.
+  single?: boolean;
 }): Promise<DayPlan> {
   const pinnedDay = opts.pinnedDay ?? {};
   const free = freeSlots(pinnedDay, opts.slots);
@@ -391,7 +529,7 @@ export async function generatePlanDay(opts: {
   });
 
   const build = async (messages: ChatMessage[]) => {
-    const result = await completeJson(daySchema(free), messages);
+    const result = await completeJson(daySchema(free), messages, !opts.single);
     return withDayTotals({
       day: opts.day,
       meals: mergeMeals(opts.day, result.meals, pinnedDay, opts.slots),
@@ -403,7 +541,7 @@ export async function generatePlanDay(opts: {
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: prompt },
   ]);
-  if (!offTarget(first, opts.profile.calorieTarget)) return first;
+  if (opts.single || !offTarget(first, opts.profile.calorieTarget)) return first;
 
   // Server-side totals say the day missed the target: say so and ask again,
   // then keep whichever attempt came closer.
@@ -425,8 +563,9 @@ export async function generatePlanDay(opts: {
 
 // `startDate` is the local date key ("YYYY-MM-DD") of the plan's first day.
 // `pinned` holds the user's dishes per day name; only the other slots are
-// generated, and a fully pinned day never calls the model. `onDay` is called
-// with each finished day so the caller can stream it out.
+// generated, and a fully pinned week never calls the model. `onDay` is called
+// with each finished day so the caller can stream it out — including a day
+// that a repair pass later replaces, which arrives again under the same index.
 export async function generateMealPlan(
   profile: Profile,
   startDate: string,
@@ -436,19 +575,141 @@ export async function generateMealPlan(
 ): Promise<MealPlan> {
   const slots = profileSlots(profile);
   const names = planDayNames(startDate, profilePlanDays(profile));
+  const pinnedByIndex = names.map((d) => pinned[d]);
+  const free = pinnedByIndex.map((p) => freeSlots(p, slots));
   const days: DayPlan[] = [];
 
-  for (const [index, name] of names.entries()) {
-    const day = await generatePlanDay({
-      profile,
-      day: name,
-      slots,
-      locale,
-      pinnedDay: pinned[name],
-      avoid: planMealNames(days),
-    });
-    days.push(day);
+  const keep = async (index: number, day: DayPlan) => {
+    days[index] = day;
     await onDay?.(index, day);
+  };
+
+  if (free.every((f) => f.length === 0)) {
+    // Nothing to ask for: every slot is one of the user's own dishes.
+    for (const [index, name] of names.entries()) {
+      await keep(
+        index,
+        withDayTotals({
+          day: name,
+          meals: mergeMeals(name, {}, pinnedByIndex[index], slots),
+          total_kcal: 0,
+        })
+      );
+    }
+    return { generatedAt: new Date().toISOString(), startDate, days };
+  }
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: weekPrompt(profile, names, slots, locale, pinnedByIndex) },
+  ];
+
+  // Parse day objects out of the answer while it is still being written.
+  // `cursor` is a position inside one particular answer, so every fresh
+  // answer starts from a fresh scanner.
+  let cursor = 0;
+  let next = 0;
+  let issue: string | undefined;
+  // Set when a day fails the schema: the rest of that answer is unusable,
+  // because taking the next object would silently shift it into the failed
+  // day's place.
+  let halted = false;
+  const rescan = () => {
+    cursor = 0;
+    next = 0;
+    halted = false;
+  };
+
+  const consume = async (full: string) => {
+    if (halted || next >= names.length) return;
+    const scan = scanArrayObjects(full, 'days', cursor);
+    cursor = scan.next;
+    for (const raw of scan.objects) {
+      if (next >= names.length) return;
+      const index = next;
+      const parsed = tryParse(daySchema(free[index]), raw);
+      if (!parsed.data) {
+        // Remember why, so the corrective attempt can quote it.
+        issue = `days.${index}: ${parsed.issue}`;
+        halted = true;
+        return;
+      }
+      next = index + 1;
+      const name = names[index];
+      await keep(
+        index,
+        withDayTotals({
+          day: name,
+          meals: mergeMeals(name, parsed.data.meals, pinnedByIndex[index], slots),
+          total_kcal: 0,
+        })
+      );
+    }
+  };
+
+  let answer = '';
+  try {
+    answer = await chatCompletionStream(messages, consume);
+  } catch (err) {
+    // Endpoints that cannot stream, or a connection that dropped after some
+    // days: fall back to one plain call and read the days out of it.
+    if (next === 0) {
+      rescan();
+      answer = await chatCompletion(messages);
+      await consume(answer);
+    } else if (!(err instanceof UpstreamError)) {
+      throw err;
+    }
+  }
+
+  // One corrective attempt, the same contract as `completeJson`: say what was
+  // wrong and take the whole plan again.
+  if (next < names.length) {
+    const why = issue ?? `only ${next} of ${names.length} days were returned`;
+    rescan();
+    await consume(
+      await chatCompletion([
+        ...messages,
+        { role: 'assistant', content: answer },
+        {
+          role: 'user',
+          content: `Your previous response was invalid: ${why}. Return only valid JSON matching the schema.`,
+        },
+      ])
+    );
+  }
+
+  if (next < names.length) {
+    throw new GenerationFailedError(issue ?? `only ${next} of ${names.length} days were returned`);
+  }
+
+  // Totals are recomputed server-side, so a day that missed the target is
+  // known here. The repair is budgeted at one call per day and is allowed to
+  // fail: every day already passed the schema and reached the caller, so a
+  // dead repair endpoint must not throw a finished plan away.
+  for (const [index, day] of days.entries()) {
+    if (!offTarget(day, profile.calorieTarget)) continue;
+    let repaired: DayPlan | null = null;
+    try {
+      repaired = await generatePlanDay({
+        profile,
+        day: day.day,
+        slots,
+        locale,
+        pinnedDay: pinnedByIndex[index],
+        avoid: planMealNames(days, index),
+        single: true,
+      });
+    } catch {
+      repaired = null; // keep the day as generated
+    }
+    const closer =
+      repaired !== null &&
+      Math.abs(repaired.total_kcal - profile.calorieTarget) <
+        Math.abs(day.total_kcal - profile.calorieTarget);
+    // Outside the catch: a failure to persist the repaired day is the
+    // caller's problem, not something to swallow.
+    if (closer) await keep(index, repaired!);
   }
 
   return { generatedAt: new Date().toISOString(), startDate, days };
