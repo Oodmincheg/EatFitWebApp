@@ -142,6 +142,15 @@ async function chatCompletion(messages: ChatMessage[]): Promise<string> {
   }
 }
 
+// Carries a handler's failure out of the stream unchanged: the outer catch
+// turns transport problems into UpstreamError, and a failed save must not be
+// mistaken for one.
+class StreamHandlerError extends Error {
+  constructor(readonly reason: unknown) {
+    super('stream handler failed');
+  }
+}
+
 // Same endpoint, `stream: true`: the caller sees text as it is written, which
 // is what lets a week-long completion render day by day. Returns the whole
 // text once the stream ends.
@@ -188,15 +197,23 @@ async function chatCompletionStream(
         if (!trimmed.startsWith('data:')) continue;
         const payload = trimmed.slice(5).trim();
         if (payload === '[DONE]') continue;
+        let delta: unknown;
         try {
-          const chunk = JSON.parse(payload);
-          const delta = chunk?.choices?.[0]?.delta?.content;
-          if (typeof delta === 'string' && delta) {
-            full += delta;
-            await onText(full);
-          }
+          delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
         } catch {
           // A keep-alive or a partial frame — the next chunk completes it.
+          continue;
+        }
+        // Outside the frame's catch on purpose: whatever the caller does with
+        // a finished day (persisting it, streaming it out) must surface, not
+        // read as a malformed frame.
+        if (typeof delta === 'string' && delta) {
+          full += delta;
+          try {
+            await onText(full);
+          } catch (e) {
+            throw new StreamHandlerError(e);
+          }
         }
       }
     }
@@ -204,6 +221,7 @@ async function chatCompletionStream(
     if (!full) throw new UpstreamError('empty completion');
     return full;
   } catch (err) {
+    if (err instanceof StreamHandlerError) throw err.reason;
     if (err instanceof UpstreamError) throw err;
     throw new UpstreamError(err instanceof Error ? err.message : 'fetch failed');
   } finally {
@@ -240,11 +258,15 @@ function tryParse<S extends z.ZodTypeAny>(
 // then give up (the route maps GenerationFailedError to 422).
 async function completeJson<S extends z.ZodTypeAny>(
   schema: S,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  // The plan's repair pass is budgeted at one call, so it opts out of the
+  // corrective retry rather than nesting another round trip inside it.
+  retryOnInvalid = true
 ): Promise<z.infer<S>> {
   const first = await chatCompletion(messages);
   let attempt = tryParse(schema, first);
   if (attempt.data !== undefined) return attempt.data;
+  if (!retryOnInvalid) throw new GenerationFailedError(attempt.issue ?? 'invalid model output');
 
   const retry = await chatCompletion([
     ...messages,
@@ -482,6 +504,9 @@ export async function generatePlanDay(opts: {
   pinnedDay?: PinnedDay;
   avoid?: string[];
   preference?: string;
+  // One call, no schema retry and no second attempt at the target: used by
+  // the plan repair pass, whose whole budget is that single call.
+  single?: boolean;
 }): Promise<DayPlan> {
   const pinnedDay = opts.pinnedDay ?? {};
   const free = freeSlots(pinnedDay, opts.slots);
@@ -504,7 +529,7 @@ export async function generatePlanDay(opts: {
   });
 
   const build = async (messages: ChatMessage[]) => {
-    const result = await completeJson(daySchema(free), messages);
+    const result = await completeJson(daySchema(free), messages, !opts.single);
     return withDayTotals({
       day: opts.day,
       meals: mergeMeals(opts.day, result.meals, pinnedDay, opts.slots),
@@ -516,7 +541,7 @@ export async function generatePlanDay(opts: {
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: prompt },
   ]);
-  if (!offTarget(first, opts.profile.calorieTarget)) return first;
+  if (opts.single || !offTarget(first, opts.profile.calorieTarget)) return first;
 
   // Server-side totals say the day missed the target: say so and ask again,
   // then keep whichever attempt came closer.
@@ -580,17 +605,35 @@ export async function generateMealPlan(
   ];
 
   // Parse day objects out of the answer while it is still being written.
+  // `cursor` is a position inside one particular answer, so every fresh
+  // answer starts from a fresh scanner.
   let cursor = 0;
   let next = 0;
-  const onText = async (full: string) => {
-    if (next >= names.length) return;
+  let issue: string | undefined;
+  // Set when a day fails the schema: the rest of that answer is unusable,
+  // because taking the next object would silently shift it into the failed
+  // day's place.
+  let halted = false;
+  const rescan = () => {
+    cursor = 0;
+    next = 0;
+    halted = false;
+  };
+
+  const consume = async (full: string) => {
+    if (halted || next >= names.length) return;
     const scan = scanArrayObjects(full, 'days', cursor);
     cursor = scan.next;
     for (const raw of scan.objects) {
       if (next >= names.length) return;
       const index = next;
       const parsed = tryParse(daySchema(free[index]), raw);
-      if (!parsed.data) return; // malformed: let the whole-answer pass report it
+      if (!parsed.data) {
+        // Remember why, so the corrective attempt can quote it.
+        issue = `days.${index}: ${parsed.issue}`;
+        halted = true;
+        return;
+      }
       next = index + 1;
       const name = names[index];
       await keep(
@@ -604,38 +647,69 @@ export async function generateMealPlan(
     }
   };
 
+  let answer = '';
   try {
-    await chatCompletionStream(messages, onText);
+    answer = await chatCompletionStream(messages, consume);
   } catch (err) {
     // Endpoints that cannot stream, or a connection that dropped after some
     // days: fall back to one plain call and read the days out of it.
     if (next === 0) {
-      const raw = await chatCompletion(messages);
-      await onText(raw);
+      rescan();
+      answer = await chatCompletion(messages);
+      await consume(answer);
     } else if (!(err instanceof UpstreamError)) {
       throw err;
     }
   }
 
+  // One corrective attempt, the same contract as `completeJson`: say what was
+  // wrong and take the whole plan again.
   if (next < names.length) {
-    throw new GenerationFailedError(`only ${next} of ${names.length} days were returned`);
+    const why = issue ?? `only ${next} of ${names.length} days were returned`;
+    rescan();
+    await consume(
+      await chatCompletion([
+        ...messages,
+        { role: 'assistant', content: answer },
+        {
+          role: 'user',
+          content: `Your previous response was invalid: ${why}. Return only valid JSON matching the schema.`,
+        },
+      ])
+    );
+  }
+
+  if (next < names.length) {
+    throw new GenerationFailedError(issue ?? `only ${next} of ${names.length} days were returned`);
   }
 
   // Totals are recomputed server-side, so a day that missed the target is
-  // known here; repairing costs one small call and usually costs none.
+  // known here. The repair is budgeted at one call per day and is allowed to
+  // fail: every day already passed the schema and reached the caller, so a
+  // dead repair endpoint must not throw a finished plan away.
   for (const [index, day] of days.entries()) {
     if (!offTarget(day, profile.calorieTarget)) continue;
-    const repaired = await generatePlanDay({
-      profile,
-      day: day.day,
-      slots,
-      locale,
-      pinnedDay: pinnedByIndex[index],
-      avoid: planMealNames(days, index),
-    });
-    if (Math.abs(repaired.total_kcal - profile.calorieTarget) < Math.abs(day.total_kcal - profile.calorieTarget)) {
-      await keep(index, repaired);
+    let repaired: DayPlan | null = null;
+    try {
+      repaired = await generatePlanDay({
+        profile,
+        day: day.day,
+        slots,
+        locale,
+        pinnedDay: pinnedByIndex[index],
+        avoid: planMealNames(days, index),
+        single: true,
+      });
+    } catch {
+      repaired = null; // keep the day as generated
     }
+    const closer =
+      repaired !== null &&
+      Math.abs(repaired.total_kcal - profile.calorieTarget) <
+        Math.abs(day.total_kcal - profile.calorieTarget);
+    // Outside the catch: a failure to persist the repaired day is the
+    // caller's problem, not something to swallow.
+    if (closer) await keep(index, repaired!);
   }
 
   return { generatedAt: new Date().toISOString(), startDate, days };
