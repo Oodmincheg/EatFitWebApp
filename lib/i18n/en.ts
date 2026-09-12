@@ -171,6 +171,7 @@ export const en: Dict = {
     signedInAs: (name: string) => `Signed in as ${name}`,
     signedInGoogle: 'Signed in with Google',
     googleFailed: 'Google sign-in was cancelled or blocked.',
+    accountMenu: 'Account menu',
     navLabel: 'Dashboard',
     nav: {
       today: 'Today',

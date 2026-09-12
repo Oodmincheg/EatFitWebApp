@@ -13,10 +13,10 @@ const NAV_ITEMS: { href: string; icon: string; key: keyof Dict['shell']['nav'] }
   { href: '/dashboard/ingredients', icon: '🥕', key: 'ingredients' },
   { href: '/dashboard/cart', icon: '🛒', key: 'cart' },
   { href: '/dashboard/history', icon: '🗂️', key: 'history' },
-  { href: '/dashboard/account', icon: '👤', key: 'account' },
 ];
 
-// Vertical nav on ≥sm screens; a fixed bottom tab bar on phones.
+// Vertical nav on ≥sm screens; a fixed bottom tab bar on phones. Account and
+// sign-out are not here — they live behind the header avatar.
 export function Sidebar() {
   const pathname = usePathname();
   const { t } = useI18n();
