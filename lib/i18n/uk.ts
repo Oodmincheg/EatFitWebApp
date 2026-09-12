@@ -192,6 +192,7 @@ export const uk = {
     signedInAs: (name: string) => `Ви увійшли як ${name}`,
     signedInGoogle: 'Ви увійшли через Google',
     googleFailed: 'Вхід через Google скасовано або заблоковано.',
+    accountMenu: 'Меню акаунта',
     navLabel: 'Навігація',
     nav: {
       today: 'Сьогодні',
