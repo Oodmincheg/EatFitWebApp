@@ -38,11 +38,14 @@ export function WeekView({
     <div className={GRID}>
       {plan.days.map((day, i) => {
         // Only today and future days can be edited — the past is history.
-        const editable = dateKey(addDays(start, i)) >= todayKey;
+        const date = dateKey(addDays(start, i));
+        const editable = date >= todayKey;
         return (
           <DayCard
             key={day.day}
             day={day}
+            date={date}
+            pinTemplateHref={onPinSlot && !editable ? '#week-template' : undefined}
             target={target}
             eaten={eatenByDay?.[day.day]}
             regenerating={regeneratingDay === i}

@@ -199,9 +199,10 @@ export default function PlanPage() {
             <p className="mt-3 font-display text-lg font-extrabold">{t.plan.noPlan}</p>
             <p className="mt-1 text-sm text-latte">{t.plan.noPlanText}</p>
           </div>
-          <WeekTemplate />
         </>
       )}
+
+      {!generating && <WeekTemplate />}
 
       <FridgeModal
         open={fridgeOpen}

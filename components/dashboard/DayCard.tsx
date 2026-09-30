@@ -5,6 +5,7 @@ import { DishPicker } from './DishPicker';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
+import { formatDay } from '@/lib/dates';
 import { formatWeight } from '@/lib/shopping';
 import { daySlots, type DayPlan, type Meal, type MealSlot } from '@/lib/schemas';
 
@@ -34,6 +35,8 @@ function mealMacros(meal: Meal) {
 
 export function DayCard({
   day,
+  date,
+  pinTemplateHref,
   target,
   eaten,
   onRegenerate,
@@ -43,6 +46,8 @@ export function DayCard({
   regeneratingSlot = null,
 }: {
   day: DayPlan;
+  date?: string;
+  pinTemplateHref?: string;
   target: number;
   eaten?: MealSlot[];
   // Present only for today/future days — past days are history.
@@ -107,6 +112,11 @@ export function DayCard({
           {day.total_kcal}
         </span>
       </div>
+      {date && (
+        <time dateTime={date} className="mt-1 text-xs font-semibold text-latte">
+          {formatDay(date, t.intl)}
+        </time>
+      )}
       {macros && (
         <p
           className="mt-1 font-mono text-[10px] font-bold text-latte"
@@ -167,6 +177,7 @@ export function DayCard({
           <>
             <p className={`text-[10px] font-bold tracking-wide ${SLOT_ACCENT[openSlot]}`}>
               {t.mealLabels[openSlot]} · {dayText.label.toUpperCase()}
+              {date && <> · {formatDay(date, t.intl)}</>}
               {openMeal.dishId && <span className="ml-1.5 text-latte">📌 {t.pins.pinned}</span>}
             </p>
             <h2 id="meal-ingredients-title" className="mt-1 font-display text-xl font-extrabold">
@@ -204,6 +215,18 @@ export function DayCard({
             )}
             {onRegenerateMeal && openMeal.dishId && (
               <p className="mt-4 text-xs font-semibold text-latte">{t.day.swapPinned}</p>
+            )}
+            {pinTemplateHref && openMeal.dishId && (
+              <div className="mt-4 text-sm">
+                <p className="text-latte">{t.pins.pastMealHint}</p>
+                <a
+                  href={pinTemplateHref}
+                  onClick={() => setOpenSlot(null)}
+                  className="mt-2 inline-block font-bold text-tomato underline underline-offset-2"
+                >
+                  {t.pins.manageTemplate}
+                </a>
+              </div>
             )}
             {(onPin || onRegenerateMeal) && (
               <div className="mt-5 flex flex-wrap justify-end gap-3">

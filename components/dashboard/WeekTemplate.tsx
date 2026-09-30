@@ -9,9 +9,6 @@ import { useSession } from '@/hooks/useSession';
 import { profileSlots } from '@/lib/profile';
 import { DAY_NAMES, DEFAULT_MEAL_SLOTS, type DayName, type MealSlot } from '@/lib/schemas';
 
-// The weekly pin template, shown before a plan exists: seven days × the
-// profile's meal slots,
-// each either one of the user's dishes or empty for the AI to fill.
 export function WeekTemplate() {
   const { t } = useI18n();
   const { pins, pin } = usePins();
@@ -23,7 +20,7 @@ export function WeekTemplate() {
   const currentId = picker ? pins[picker.day]?.[picker.slot] : undefined;
 
   return (
-    <section className="rounded-3xl border-2 border-ink bg-paper p-4 sm:p-5">
+    <section id="week-template" className="scroll-mt-4 rounded-3xl border-2 border-ink bg-paper p-4 sm:p-5">
       <h2 className="font-display text-lg font-extrabold">{t.pins.templateTitle}</h2>
       <p className="mt-1 text-sm font-semibold text-latte">{t.pins.templateText}</p>
 
