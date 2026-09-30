@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { getDb } from './client';
 import {
   coerceStoredPlan,
+  DishSchema,
   type DayName,
   type DayProgress,
   type EatenExtra,
@@ -324,7 +325,7 @@ export async function updateOrderStatus(
 
 // ── Dishes ──────────────────────────────────────────────────
 function toDish(doc: DishDoc): Dish {
-  return {
+  return DishSchema.parse({
     id: doc._id.toHexString(),
     name: doc.name,
     kcal: doc.kcal,
@@ -332,8 +333,12 @@ function toDish(doc: DishDoc): Dish {
     fat_g: doc.fat_g,
     carbs_g: doc.carbs_g,
     ingredients: doc.ingredients,
+    recipeServings: doc.recipeServings,
+    cookingMinutes: doc.cookingMinutes,
+    attention: doc.attention,
+    classification: doc.classification,
     createdAt: doc.createdAt,
-  };
+  });
 }
 
 export async function listDishes(uid: string): Promise<Dish[]> {
@@ -358,7 +363,13 @@ export async function updateDish(uid: string, id: string, input: DishInput): Pro
   if (!ObjectId.isValid(id)) return null;
   const doc = await (await dishes()).findOneAndUpdate(
     { _id: new ObjectId(id), userId: uid },
-    { $set: { ...input, updatedAt: new Date().toISOString() } },
+    {
+      $set: { ...input, updatedAt: new Date().toISOString() },
+      $unset: Object.fromEntries(
+        ['recipeServings', 'cookingMinutes', 'attention', 'classification', 'kcal', 'protein_g', 'fat_g', 'carbs_g']
+          .filter((key) => !Object.hasOwn(input, key)).map((key) => [key, ''])
+      ),
+    },
     { returnDocument: 'after' }
   );
   return doc ? toDish(doc) : null;

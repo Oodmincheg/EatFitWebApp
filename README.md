@@ -1,12 +1,38 @@
 # EatFit
 
-Weekly meal plans from what is already in your fridge, with the missing groceries added
-straight to your real Silpo cart. Ukrainian-first UI, English toggle.
+Shared cooking plans for two, with familiar recipes, planned leftovers and a shopping
+list that counts each cooking batch once. Pantry ingredients get a preference, and
+missing groceries can be added to a Silpo cart. Ukrainian-first UI, English toggle.
 
 Live: https://eat-fit-web-app.vercel.app · Silpo AI Factory hackathon entry (submission
 due 2026-09-14 23:59 Kyiv, video pitch mandatory).
 
-## What it does
+## Shared cooking
+
+Open Plan and create a shared plan for 3, 5 or 7 days. In My dishes, set each recipe's
+portion yield and mark it regular or experimental. Ingredient weights and optional
+nutrition describe the whole recipe at that yield. Existing recipes need an explicit
+yield before the shared planner can use them.
+
+Choose a dish and how many portions to cook. Each meal serves two portions. A later
+meal can use spare portions from the same batch; the shopping list counts that batch
+once. Meals can be moved, left empty or marked away from home. A cooking assignment
+cannot be removed while other meals depend on it.
+
+Fill empty meals uses regular saved recipes and up to three selected experimental
+recipes. It preserves existing assignments. Recurring pins apply to newly created
+plans; changing them does not rewrite the current shared plan. Experiments become
+regular only through the Make regular action in My dishes.
+
+Today and history show cooking or reheating and known calories per portion. Unknown
+nutrition stays unknown. Recipes with missing ingredient quantities produce a visibly
+incomplete shopping list and block cart building. Empty meals produce a partial-plan
+notice. Recipe changes apply to future batches; existing plans keep recipe snapshots.
+
+The earlier calorie-based planner remains available before creating a shared plan.
+Its history is retained separately. See [the implementation plan](docs/PLAN_SharedCooking.md).
+
+## Legacy calorie planner
 
 1. Onboarding: goal, age, weight, height, sex, activity → Harris-Benedict daily kcal
    target, which My account can override by hand.

@@ -1,3 +1,4 @@
+import { latestCookingPlan } from '@/lib/db/cookingPlans';
 import { NextResponse } from 'next/server';
 import { SessionBodySchema } from '@/lib/schemas';
 import { BodyError, clearUidCookie, getUid, readJsonBody, setUidCookie } from '@/lib/session';
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
       profile: user.profile ?? null,
       plan,
       pins: user.pins ?? {},
+      cookingPlan: await latestCookingPlan(user._id),
     });
   } catch {
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from './useSession';
-import type { Dish, DishEstimate, DishInput, MealPlan, Pins } from '@/lib/schemas';
+import { DishSchema, type Dish, type DishEstimate, type DishInput, type MealPlan, type Pins } from '@/lib/schemas';
 
 async function send<T>(url: string, method: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -26,7 +26,7 @@ export function useDishes(enabled = true) {
     let cancelled = false;
     setLoading(true);
     send<{ dishes: Dish[] }>('/api/dishes', 'GET')
-      .then((data) => !cancelled && setDishes(data.dishes))
+      .then((data) => !cancelled && setDishes(DishSchema.array().parse(data.dishes)))
       .catch(() => {})
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -36,16 +36,18 @@ export function useDishes(enabled = true) {
 
   const create = useCallback(async (input: DishInput): Promise<Dish> => {
     const { dish } = await send<{ dish: Dish }>('/api/dishes', 'POST', input);
-    setDishes((prev) => [dish, ...prev]);
-    return dish;
+    const valid = DishSchema.parse(dish);
+    setDishes((prev) => [valid, ...prev]);
+    return valid;
   }, []);
 
   const update = useCallback(
     async (id: string, input: DishInput): Promise<Dish> => {
       const data = await send<{ dish: Dish; plan: MealPlan | null }>(`/api/dishes/${id}`, 'PUT', input);
-      setDishes((prev) => prev.map((d) => (d.id === id ? data.dish : d)));
+      const valid = DishSchema.parse(data.dish);
+      setDishes((prev) => prev.map((d) => (d.id === id ? valid : d)));
       if (data.plan) setPlan(data.plan);
-      return data.dish;
+      return valid;
     },
     [setPlan]
   );

@@ -16,13 +16,14 @@ export type PinnedDay = Partial<Record<MealSlot, Meal>>;
 export type PinnedWeek = Partial<Record<DayName, PinnedDay>>;
 
 export function dishToMeal(dish: Dish): Meal {
+  if (dish.kcal === undefined) throw new Error('dish_nutrition_missing');
   return {
     name: dish.name,
-    kcal: dish.kcal,
-    protein_g: dish.protein_g,
-    fat_g: dish.fat_g,
-    carbs_g: dish.carbs_g,
-    ingredients: dish.ingredients.map((i) => ({ name: i.name, grams: i.grams })),
+    kcal: Math.round(dish.kcal / (dish.recipeServings ?? 1)),
+    protein_g: dish.protein_g === undefined ? undefined : Math.round(dish.protein_g / (dish.recipeServings ?? 1)),
+    fat_g: dish.fat_g === undefined ? undefined : Math.round(dish.fat_g / (dish.recipeServings ?? 1)),
+    carbs_g: dish.carbs_g === undefined ? undefined : Math.round(dish.carbs_g / (dish.recipeServings ?? 1)),
+    ingredients: dish.ingredients.map((i) => ({ name: i.name, grams: (i.grams ?? 0) / (dish.recipeServings ?? 1) })),
     dishId: dish.id,
   };
 }
@@ -37,7 +38,7 @@ export function pinnedWeek(pins: Pins, dishes: Dish[]): PinnedWeek {
     for (const slot of MEAL_SLOTS) {
       const id = slots[slot];
       const dish = id ? byId.get(id) : undefined;
-      if (dish) (week[day] ??= {})[slot] = dishToMeal(dish);
+      if (dish && dish.kcal !== undefined) (week[day] ??= {})[slot] = dishToMeal(dish);
     }
   }
   return week;
@@ -92,6 +93,7 @@ export function applyPinToPlan(
 
 // A dish was edited: every plan slot pinned to it shows the new values.
 export function refreshDishInPlan(plan: MealPlan, dish: Dish): MealPlan {
+  if (dish.kcal === undefined) return plan;
   const meal = dishToMeal(dish);
   return {
     ...plan,

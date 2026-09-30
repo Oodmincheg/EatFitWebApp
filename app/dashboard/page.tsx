@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { CookingWeekView } from '@/components/dashboard/CookingWeekView';
 import { TodayCard } from '@/components/dashboard/TodayCard';
 import { WeekStrip } from '@/components/dashboard/WeekStrip';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -11,6 +13,18 @@ import { profileSlots } from '@/lib/profile';
 import { daySlots } from '@/lib/schemas';
 
 export default function TodayPage() {
+  const { cookingPlan } = useSession();
+  const { t } = useI18n();
+  if (!cookingPlan) return <LegacyTodayPage />;
+  return <>
+    <h1 className="font-display text-2xl font-extrabold">{t.today.title}</h1>
+    <p>{t.cooking.title}</p>
+    <CookingWeekView plan={cookingPlan} onlyDate={dateKey(new Date())} />
+    <Link href="/dashboard/plan" className="font-bold text-tomato underline">{t.cooking.openPlan}</Link>
+  </>;
+}
+
+function LegacyTodayPage() {
   const { t } = useI18n();
   const { profile, plan } = useSession();
   const { byDate, extrasByDate, loading, toggle, addExtra, removeExtra, estimateExtra } = useProgress();

@@ -53,10 +53,14 @@ export async function PUT(req: Request) {
     const dish = dishId ? await getDish(uid, dishId) : null;
     if (dishId && !dish) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+    if (!parsed.data.templateOnly && dish && dish.kcal === undefined) return NextResponse.json({ error: 'dish_nutrition_missing' }, { status: 409 });
+
+    if (parsed.data.templateOnly && dish && (!dish.recipeServings || dish.classification !== 'regular')) return NextResponse.json({ error: 'recipe_setup_required' }, { status: 409 });
+
     const pins = await setPin(uid, day, slot, dishId);
 
     let plan = await latestPlan(uid);
-    if (plan) {
+    if (plan && !parsed.data.templateOnly) {
       const idx = plan.days.findIndex((d) => d.day === day);
       const date = idx >= 0 ? dateKey(addDays(planStart(plan), idx)) : null;
       if (date && date >= today) {

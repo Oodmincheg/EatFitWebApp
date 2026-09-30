@@ -213,6 +213,25 @@ the wrong day in that slot. Parsing now halts for the whole answer, keeps the va
 issue, and spends the one corrective attempt that AGENTS.md calls for; the retry is read
 from a fresh scanner, because a cursor belongs to the answer it was measuring.
 
+## 2026-09-28 · Shared meals reference cooking batches
+
+The planning unit is a batch with a recipe snapshot and an explicit yield. A meal
+assigns two portions from that batch to a date and slot. This separates preparing food
+from reheating it and keeps shopping from counting tomorrow's lunch twice.
+
+Version 2 lives in `cooking_plans` and a separate session field. Old plans lack yields
+and batch references, so they retain their original format and history. A new recipe's
+nutrition is optional; MongoDB omits undefined snapshot fields instead of storing null.
+
+Manual edits and AI proposals share the same portion and chronology validation. AI
+adds only to empty slots and returns one atomic result, with one corrective attempt.
+The legacy stream remains unchanged. Revision checks prevent concurrent edits from
+overwriting a newer version of the same plan.
+
+Recurring pins seed independent batches in future plans. They do not mutate current
+shared batches, whose remaining portions may already belong to another meal. Only
+regular recipes are recurring; experimental choices are explicit per generation.
+
 ## Open
 
 - Real token verification for Google sign-in (`firebase-admin` or Auth.js).

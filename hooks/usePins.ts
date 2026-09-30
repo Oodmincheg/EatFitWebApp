@@ -10,7 +10,7 @@ import type { DayName, MealPlan, MealSlot, Pins } from '@/lib/schemas';
 // Pin one of the user's dishes into a day/slot of the weekly template (or
 // unpin with null). The server also swaps the slot in the current plan when
 // that day is today or later, and returns both.
-export function usePins() {
+export function usePins(templateOnly = false) {
   const { pins, setPins, setPlan } = useSession();
   const toast = useToast();
   const { t } = useI18n();
@@ -21,7 +21,7 @@ export function usePins() {
         const res = await fetch('/api/pins', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ day, slot, dishId, today: dateKey(new Date()) }),
+          body: JSON.stringify({ day, slot, dishId, today: dateKey(new Date()), templateOnly }),
         });
         if (!res.ok) throw new Error('pin_failed');
         const data: { pins: Pins; plan: MealPlan | null } = await res.json();
@@ -33,7 +33,7 @@ export function usePins() {
         return false;
       }
     },
-    [setPins, setPlan, toast, t]
+    [setPins, setPlan, toast, t, templateOnly]
   );
 
   return { pins, pin };

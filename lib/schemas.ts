@@ -244,21 +244,75 @@ export const ParseFridgeBodySchema = z.object({
 // ── User dishes (own recipes with known kcal and macros) ────
 export const DishInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  kcal: z.number().nonnegative().max(5000),
-  protein_g: z.number().nonnegative().max(1000),
-  fat_g: z.number().nonnegative().max(1000),
-  carbs_g: z.number().nonnegative().max(1000),
-  ingredients: z
-    .array(z.object({ name: z.string().trim().min(1).max(80), grams: z.number().nonnegative().max(10_000) }))
-    .max(40),
+  recipeServings: z.number().int().min(1).max(40).optional(),
+  cookingMinutes: z.number().int().min(1).max(1440).optional(),
+  attention: z.enum(['low', 'medium', 'high']).optional(),
+  classification: z.enum(['regular', 'experimental']).optional(),
+  kcal: z.number().nonnegative().max(100_000).optional(),
+  protein_g: z.number().nonnegative().max(10_000).optional(),
+  fat_g: z.number().nonnegative().max(10_000).optional(),
+  carbs_g: z.number().nonnegative().max(10_000).optional(),
+  ingredients: z.array(z.object({
+    name: z.string().trim().min(1).max(80),
+    grams: z.number().nonnegative().max(100_000).optional(),
+  })).max(40),
 });
 export type DishInput = z.infer<typeof DishInputSchema>;
+export const DishSchema = DishInputSchema.extend({ id: z.string().min(1), createdAt: z.string() });
+export type Dish = z.infer<typeof DishSchema>;
 
-// Client-facing dish (id is the Mongo ObjectId as hex).
-export interface Dish extends DishInput {
-  id: string;
-  createdAt: string;
-}
+export const RecipeSnapshotSchema = DishInputSchema.extend({
+  recipeServings: z.number().int().min(1).max(40),
+  classification: z.enum(['regular', 'experimental']),
+  dishId: z.string().optional(),
+});
+export type RecipeSnapshot = z.infer<typeof RecipeSnapshotSchema>;
+export const CookingPositionSchema = z.object({ date: DateKeySchema, slot: MealSlotSchema });
+export const CookingBatchSchema = z.object({
+  id: z.string().min(1).max(100),
+  recipe: RecipeSnapshotSchema,
+  cookAt: CookingPositionSchema,
+  servings: z.number().int().min(2).max(40),
+});
+export type CookingBatch = z.infer<typeof CookingBatchSchema>;
+export const CookingAssignmentSchema = z.discriminatedUnion('kind', [
+  CookingPositionSchema.extend({ kind: z.literal('meal'), batchId: z.string().min(1), servings: z.literal(2) }),
+  CookingPositionSchema.extend({ kind: z.literal('away') }),
+]);
+export type CookingAssignment = z.infer<typeof CookingAssignmentSchema>;
+export const CookingPlanSchema = z.object({
+  version: z.literal(2),
+  id: z.string().min(1),
+  revision: z.number().int().nonnegative(),
+  generatedAt: z.string(),
+  startDate: DateKeySchema,
+  dayCount: PlanDaysSchema,
+  slots: z.array(MealSlotSchema).min(2).max(5),
+  batches: z.array(CookingBatchSchema).max(35),
+  assignments: z.array(CookingAssignmentSchema).max(35),
+});
+export type CookingPlan = z.infer<typeof CookingPlanSchema>;
+export const CookingActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('create'), startDate: DateKeySchema, dayCount: PlanDaysSchema }),
+  z.object({ type: z.literal('cook'), at: CookingPositionSchema, dishId: z.string().min(1), servings: z.number().int().min(2).max(40) }),
+  z.object({ type: z.literal('reuse'), at: CookingPositionSchema, batchId: z.string().min(1) }),
+  z.object({ type: z.literal('away'), at: CookingPositionSchema }),
+  z.object({ type: z.literal('remove'), at: CookingPositionSchema }),
+  z.object({ type: z.literal('move'), from: CookingPositionSchema, to: CookingPositionSchema }),
+  z.object({ type: z.literal('resize'), batchId: z.string().min(1), servings: z.number().int().min(2).max(40) }),
+]);
+export type CookingAction = z.infer<typeof CookingActionSchema>;
+export const CookingMutationSchema = z.object({
+  planId: z.string().optional(),
+  revision: z.number().int().nonnegative().optional(),
+  action: CookingActionSchema,
+});
+export const CookingResponseSchema = z.object({ plan: CookingPlanSchema });
+export const CookingGenerateSchema = z.object({
+  planId: z.string().min(1),
+  revision: z.number().int().nonnegative(),
+  experimentalDishIds: z.array(z.string().min(1)).max(3).default([]),
+});
 
 // Ask the model for kcal and macros of a dish from its ingredient list.
 export const DishEstimateBodySchema = z.object({
@@ -282,6 +336,7 @@ export const PinsSchema = z.partialRecord(DayNameSchema, z.partialRecord(MealSlo
 export type Pins = z.infer<typeof PinsSchema>;
 
 export const PinBodySchema = z.object({
+  templateOnly: z.boolean().optional(),
   day: DayNameSchema,
   slot: MealSlotSchema,
   dishId: z.string().min(1).nullable(), // null = unpin
@@ -522,5 +577,6 @@ export const SessionPayloadSchema = z.object({
   profile: ProfileSchema.nullable(),
   plan: MealPlanSchema.nullable(),
   pins: PinsSchema.optional(),
+  cookingPlan: CookingPlanSchema.nullable().optional(),
 });
 export type SessionPayload = z.infer<typeof SessionPayloadSchema>;

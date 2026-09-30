@@ -10,12 +10,14 @@ import { useI18n } from '@/hooks/useI18n';
 // already pinned there and enables "Unpin".
 export function DishPicker({
   open,
+  shared = false,
   title,
   currentId,
   onPick,
   onUnpin,
   onClose,
 }: {
+  shared?: boolean;
   open: boolean;
   title: string;
   currentId?: string;
@@ -31,7 +33,7 @@ export function DishPicker({
       <h2 id="dish-picker-title" className="font-display text-xl font-extrabold">
         {title}
       </h2>
-      <p className="mt-1 text-sm font-semibold text-latte">{t.pins.pickText}</p>
+      <p className="mt-1 text-sm font-semibold text-latte">{shared ? t.cooking.templateText : t.pins.pickText}</p>
 
       {loading ? (
         <ul className="mt-4 flex flex-col gap-2">
@@ -57,6 +59,7 @@ export function DishPicker({
               <li key={d.id}>
                 <button
                   onClick={() => onPick(d.id)}
+                  disabled={shared ? !d.recipeServings || d.classification !== 'regular' : d.kcal === undefined}
                   aria-pressed={active}
                   className={`w-full rounded-xl border-2 px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-tomato ${
                     active ? 'border-ink bg-peach' : 'border-peach-line bg-paper hover:border-ink'
@@ -64,7 +67,7 @@ export function DishPicker({
                 >
                   <span className="block text-sm font-semibold text-ink">{d.name}</span>
                   <span className="block font-mono text-xs font-bold text-latte">
-                    {t.pins.kcal(d.kcal)} · {t.day.macrosShort(d.protein_g, d.fat_g, d.carbs_g)}
+                    {shared ? d.recipeServings && d.classification === 'regular' ? t.cooking.portions(d.recipeServings) : t.cooking.templateSetup : d.kcal === undefined ? t.cooking.legacyNutrition : t.pins.kcal(Math.round(d.kcal / (d.recipeServings ?? 1)))}
                   </span>
                 </button>
               </li>

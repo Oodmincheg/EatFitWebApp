@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { CookingWeekView } from '@/components/dashboard/CookingWeekView';
+import { useCookingHistory } from '@/hooks/useCookingPlan';
+import { parseDateKey } from '@/lib/dates';
 import { WeekView } from '@/components/dashboard/WeekView';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useI18n } from '@/hooks/useI18n';
@@ -13,6 +16,7 @@ import type { DayProgress, MealPlan, MealSlot } from '@/lib/schemas';
 export default function HistoryPage() {
   const { t } = useI18n();
   const { profile } = useSession();
+  const shared = useCookingHistory();
   const [plans, setPlans] = useState<MealPlan[] | null>(null);
   const [eatenByDate, setEatenByDate] = useState<Record<string, MealSlot[]>>({});
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
@@ -56,13 +60,21 @@ export default function HistoryPage() {
         <p className="mt-0.5 text-sm font-semibold text-latte">{t.history.subtitle}</p>
       </div>
 
+      {shared.error && <p role="alert">{t.cooking.errors.server_error}</p>}
+      {shared.plans.length > 0 && <section className="space-y-3">
+        <h2 className="text-lg font-bold">{t.cooking.history}</h2>
+        {shared.plans.map((plan) => <details key={plan.id} className="rounded-3xl border-2 border-ink bg-paper p-4">
+          <summary className="cursor-pointer font-bold">{parseDateKey(plan.startDate).toLocaleDateString(t.intl)} · {t.cooking.days}: {plan.dayCount}</summary>
+          <div className="mt-4"><CookingWeekView plan={plan} /></div>
+        </details>)}
+      </section>}
       {plans === null ? (
         <div className="space-y-3">
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
         </div>
-      ) : plans.length === 0 ? (
+      ) : plans.length === 0 && shared.plans.length > 0 ? null : plans.length === 0 ? (
         <div className="rounded-3xl border-2 border-dashed border-sand py-16 text-center">
           <p className="text-3xl" aria-hidden="true">
             🗂️

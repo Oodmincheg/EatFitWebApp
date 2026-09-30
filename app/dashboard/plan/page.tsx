@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { CookingPlanner } from '@/components/dashboard/CookingPlanner';
 import { FridgeModal } from '@/components/dashboard/FridgeModal';
 import { SummaryCard } from '@/components/dashboard/SummaryCard';
 import { WeekSkeleton, WeekView } from '@/components/dashboard/WeekView';
@@ -18,6 +19,18 @@ import { profilePlanDays, profileSlots } from '@/lib/profile';
 import type { DietaryTag, MealPlan, PantryItem } from '@/lib/schemas';
 
 export default function PlanPage() {
+  const { cookingPlan } = useSession();
+  const { t } = useI18n();
+  return <>
+    <CookingPlanner />
+    {!cookingPlan && <details className="rounded-3xl border-2 border-sand p-4">
+      <summary className="cursor-pointer font-bold">{t.cooking.legacy}</summary>
+      <div className="mt-5 space-y-5"><LegacyPlanPage /></div>
+    </details>}
+  </>;
+}
+
+function LegacyPlanPage() {
   const { t } = useI18n();
   const { profile, saveProfile } = useSession();
   const {

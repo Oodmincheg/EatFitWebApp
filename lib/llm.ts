@@ -1,5 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
+import { CookingProposalSchema, mergeCookingProposal } from './cookingPlan';
+import { cookingPrompt } from './cookingPrompt';
 import {
   DAY_NAMES,
   DEFAULT_MEAL_SLOTS,
@@ -879,4 +881,28 @@ export async function estimateEaten(text: string, locale: Locale): Promise<Extra
     fat_g: Math.round(est.fat_g),
     carbs_g: Math.round(est.carbs_g),
   };
+}
+
+export async function generateSharedCookingPlan(
+  plan: import('./schemas').CookingPlan,
+  dishes: import('./schemas').Dish[],
+  experimentalDishIds: string[],
+  profile: Profile,
+): Promise<import('./schemas').CookingPlan> {
+  if (plan.assignments.length === plan.dayCount * plan.slots.length) return plan;
+  const messages: ChatMessage[] = [
+    { role: 'system', content: 'You plan household cooking. Return the requested JSON object only.' },
+    { role: 'user', content: cookingPrompt(plan, dishes, experimentalDishIds, profile) },
+  ];
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const answer = await chatCompletion(messages);
+    try {
+      return mergeCookingProposal(plan, CookingProposalSchema.parse(JSON.parse(answer)), dishes, experimentalDishIds);
+    } catch (error) {
+      if (attempt === 1) throw new GenerationFailedError('Invalid cooking plan');
+      const issue = error instanceof z.ZodError ? JSON.stringify(error.issues) : error instanceof Error ? error.message : 'invalid_plan';
+      messages.push({ role: 'assistant', content: answer }, { role: 'user', content: `Validation failed: ${issue}. Return a corrected complete proposal of additions, preserving the existing plan.` });
+    }
+  }
+  throw new GenerationFailedError('Invalid cooking plan');
 }

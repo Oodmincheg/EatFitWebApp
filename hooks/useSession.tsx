@@ -12,6 +12,7 @@ import { clearUserStorage } from '@/lib/clientStorage';
 import {
   SessionPayloadSchema,
   type MealPlan,
+  type CookingPlan,
   type Pins,
   type Profile,
   type ProfileInput,
@@ -25,6 +26,8 @@ interface SessionState {
   profile: Profile | null;
   plan: MealPlan | null;
   pins: Pins;
+  cookingPlan: CookingPlan | null;
+  setCookingPlan: (plan: CookingPlan) => void;
   startGuest: () => Promise<Session>;
   startGoogle: (idToken: string) => Promise<Session>;
   saveProfile: (input: ProfileInput) => Promise<Profile>;
@@ -50,6 +53,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlanState] = useState<MealPlan | null>(null);
+  const [cookingPlan, setCookingPlan] = useState<CookingPlan | null>(null);
   const [pins, setPinsState] = useState<Pins>({});
 
   const adopt = useCallback((payload: SessionPayload) => {
@@ -57,6 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setProfile(payload.profile);
     setPlanState(payload.plan);
     setPinsState(payload.pins ?? {});
+    setCookingPlan(payload.cookingPlan ?? null);
   }, []);
 
   // Every session payload is validated before it reaches state; a malformed
@@ -142,6 +147,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setPlanState(null);
     setPinsState({});
+    setCookingPlan(null);
   }, []);
 
   return (
@@ -152,6 +158,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         profile,
         plan,
         pins,
+        cookingPlan,
+        setCookingPlan,
         startGuest,
         startGoogle,
         saveProfile,

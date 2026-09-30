@@ -9,9 +9,9 @@ import { useSession } from '@/hooks/useSession';
 import { profileSlots } from '@/lib/profile';
 import { DAY_NAMES, DEFAULT_MEAL_SLOTS, type DayName, type MealSlot } from '@/lib/schemas';
 
-export function WeekTemplate() {
+export function WeekTemplate({ shared = false }: { shared?: boolean }) {
   const { t } = useI18n();
-  const { pins, pin } = usePins();
+  const { pins, pin } = usePins(shared);
   const { profile } = useSession();
   const { dishes } = useDishes();
   const slots = profile ? profileSlots(profile) : DEFAULT_MEAL_SLOTS;
@@ -22,7 +22,7 @@ export function WeekTemplate() {
   return (
     <section id="week-template" className="scroll-mt-4 rounded-3xl border-2 border-ink bg-paper p-4 sm:p-5">
       <h2 className="font-display text-lg font-extrabold">{t.pins.templateTitle}</h2>
-      <p className="mt-1 text-sm font-semibold text-latte">{t.pins.templateText}</p>
+      <p className="mt-1 text-sm font-semibold text-latte">{shared ? t.cooking.templateText : t.pins.templateText}</p>
 
       <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {DAY_NAMES.map((day) => (
@@ -49,7 +49,7 @@ export function WeekTemplate() {
                         <>
                           <span className="block text-xs font-semibold leading-tight">📌 {dish.name}</span>
                           <span className="font-mono text-[10px] font-bold text-sand">
-                            {t.pins.kcal(dish.kcal)}
+                            {dish.kcal === undefined ? t.cooking.nutritionUnknown : t.pins.kcal(Math.round(dish.kcal / (dish.recipeServings ?? 1)))}
                           </span>
                         </>
                       ) : (
@@ -65,15 +65,16 @@ export function WeekTemplate() {
       </div>
 
       <DishPicker
+        shared={shared}
         open={picker !== null}
         title={picker ? t.pins.pickTitle(t.meals[picker.slot], t.days[picker.day].label) : ''}
         currentId={currentId}
         onPick={async (id) => {
-          if (picker) await pin(picker.day, picker.slot, id);
+          if (picker && !await pin(picker.day, picker.slot, id)) return;
           setPicker(null);
         }}
         onUnpin={async () => {
-          if (picker) await pin(picker.day, picker.slot, null);
+          if (picker && !await pin(picker.day, picker.slot, null)) return;
           setPicker(null);
         }}
         onClose={() => setPicker(null)}

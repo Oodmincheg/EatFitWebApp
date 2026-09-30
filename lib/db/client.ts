@@ -15,6 +15,7 @@ async function init(): Promise<Db> {
   await Promise.all([
     db.collection('users').createIndex({ firebaseUid: 1 }, { unique: true, sparse: true }),
     db.collection('plans').createIndex({ userId: 1, generatedAt: -1 }),
+    db.collection('cooking_plans').createIndex({ userId: 1, createdAt: -1 }),
     db.collection('progress').createIndex({ userId: 1, date: 1 }),
     db.collection('orders').createIndex({ userId: 1, createdAt: -1 }),
     db.collection('dishes').createIndex({ userId: 1, createdAt: -1 }),

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
-import { num } from '@/lib/num';
+import { num, optNum } from '@/lib/num';
 import type { Dish, DishEstimate, DishInput } from '@/lib/schemas';
 
 type Row = { name: string; grams: string };
@@ -32,6 +32,10 @@ export function DishForm({
   const { t } = useI18n();
   const f = t.dishes.form;
   const [name, setName] = useState('');
+  const [servings, setServings] = useState('2');
+  const [minutes, setMinutes] = useState('');
+  const [attention, setAttention] = useState<NonNullable<DishInput['attention']> | ''>('');
+  const [classification, setClassification] = useState<NonNullable<DishInput['classification']> | ''>('regular');
   const [rows, setRows] = useState<Row[]>([emptyRow()]);
   const [kcal, setKcal] = useState('');
   const [protein, setProtein] = useState('');
@@ -45,15 +49,19 @@ export function DishForm({
   useEffect(() => {
     if (!open) return;
     setName(dish?.name ?? '');
+    setServings(dish ? String(dish.recipeServings ?? '') : '2');
+    setMinutes(String(dish?.cookingMinutes ?? ''));
+    setAttention(dish?.attention ?? '');
+    setClassification(dish ? dish.classification ?? '' : 'regular');
     setRows(
       dish && dish.ingredients.length
-        ? dish.ingredients.map((i) => ({ name: i.name, grams: String(i.grams) }))
+        ? dish.ingredients.map((i) => ({ name: i.name, grams: String(i.grams ?? '') }))
         : [emptyRow()]
     );
-    setKcal(dish ? String(dish.kcal) : '');
-    setProtein(dish ? String(dish.protein_g) : '');
-    setFat(dish ? String(dish.fat_g) : '');
-    setCarbs(dish ? String(dish.carbs_g) : '');
+    setKcal(String(dish?.kcal ?? ''));
+    setProtein(String(dish?.protein_g ?? ''));
+    setFat(String(dish?.fat_g ?? ''));
+    setCarbs(String(dish?.carbs_g ?? ''));
     setSaving(false);
     setEstimating(false);
     setError(null);
@@ -62,14 +70,14 @@ export function DishForm({
   const ingredients = () =>
     rows
       .filter((r) => r.name.trim())
-      .map((r) => ({ name: r.name.trim(), grams: num(r.grams) }));
+      .map((r) => ({ name: r.name.trim(), grams: optNum(r.grams) }));
 
   const updateRow = (i: number, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const estimate = async () => {
-    const list = ingredients().filter((i) => i.grams > 0);
-    if (list.length === 0) return;
+    const list = ingredients().flatMap((i) => i.grams !== undefined && i.grams > 0 ? [{ name: i.name, grams: i.grams }] : []);
+    if (list.length === 0 || ingredients().some((i) => i.grams === undefined)) return;
     setEstimating(true);
     setError(null);
     try {
@@ -90,15 +98,23 @@ export function DishForm({
       setError(f.nameRequired);
       return;
     }
+    if (!Number.isInteger(num(servings)) || num(servings) < 1 || num(servings) > 40 || !classification) {
+      setError(t.cooking.errors.recipe_setup_required);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await onSave({
         name: name.trim(),
-        kcal: num(kcal),
-        protein_g: num(protein),
-        fat_g: num(fat),
-        carbs_g: num(carbs),
+        recipeServings: num(servings),
+        ...(optNum(minutes) === undefined ? {} : { cookingMinutes: optNum(minutes) }),
+        ...(attention ? { attention } : {}),
+        classification,
+        ...(optNum(kcal) === undefined ? {} : { kcal: optNum(kcal) }),
+        ...(optNum(protein) === undefined ? {} : { protein_g: optNum(protein) }),
+        ...(optNum(fat) === undefined ? {} : { fat_g: optNum(fat) }),
+        ...(optNum(carbs) === undefined ? {} : { carbs_g: optNum(carbs) }),
         ingredients: ingredients(),
       });
     } catch {
@@ -127,6 +143,28 @@ export function DishForm({
         />
       </label>
 
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <label className="text-sm font-bold">{t.cooking.recipeServings}
+          <input type="number" min={1} max={40} value={servings} onChange={(e) => setServings(e.target.value)} className={`mt-1 w-full ${inputCls}`} />
+        </label>
+        <label className="text-sm font-bold">{t.cooking.classification}
+          <select value={classification} onChange={(e) => setClassification(e.target.value as typeof classification)} className={`mt-1 w-full ${inputCls}`}>
+            <option value="">{t.cooking.unclassified}</option>
+            <option value="regular">{t.cooking.regular}</option>
+            <option value="experimental">{t.cooking.experimental}</option>
+          </select>
+        </label>
+        <label className="text-sm font-bold">{t.cooking.minutes}
+          <input type="number" min={1} max={1440} value={minutes} onChange={(e) => setMinutes(e.target.value)} className={`mt-1 w-full ${inputCls}`} />
+        </label>
+        <label className="text-sm font-bold">{t.cooking.attention}
+          <select value={attention} onChange={(e) => setAttention(e.target.value as typeof attention)} className={`mt-1 w-full ${inputCls}`}>
+            <option value="">{t.cooking.unknown}</option>
+            {(['low', 'medium', 'high'] as const).map((level) => <option key={level} value={level}>{t.cooking.attentionLevels[level]}</option>)}
+          </select>
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-latte">{dish && !dish.recipeServings ? t.cooking.legacyYield : t.cooking.yieldHint}</p>
       <h3 className="mt-5 text-sm font-bold">{f.ingredients}</h3>
       <ul className="mt-1.5 flex flex-col gap-2">
         {rows.map((row, i) => (
@@ -143,7 +181,7 @@ export function DishForm({
               value={row.grams}
               onChange={(e) => updateRow(i, { grams: e.target.value })}
               inputMode="decimal"
-              placeholder="0"
+              placeholder={t.cooking.unknown}
               aria-label={f.grams}
               className={`w-20 text-right ${inputCls}`}
             />
@@ -172,13 +210,13 @@ export function DishForm({
         <Button
           variant="secondary"
           onClick={estimate}
-          disabled={busy || ingredients().every((i) => i.grams <= 0)}
+          disabled={busy || ingredients().length === 0 || ingredients().some((i) => i.grams === undefined) || ingredients().every((i) => !i.grams)}
           className="px-3 py-1.5 text-xs"
         >
           {estimating ? f.estimating : f.estimate}
         </Button>
       </div>
-      <p className="mt-0.5 text-xs font-semibold text-latte">{f.estimateHint}</p>
+      <p className="mt-0.5 text-xs font-semibold text-latte">{t.cooking.nutritionOptional}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {(
           [
@@ -194,7 +232,7 @@ export function DishForm({
               value={value}
               onChange={(e) => set(e.target.value)}
               inputMode="decimal"
-              placeholder="0"
+              placeholder={t.cooking.unknown}
               className={`mt-1 w-full ${inputCls}`}
             />
           </label>

@@ -29,7 +29,9 @@ export function ShoppingList({
   plan,
   pantry,
   onOrder,
+  incomplete = false,
 }: {
+  incomplete?: boolean;
   plan: MealPlan;
   pantry: PantryItem[];
   onOrder: (items: OrderItem[]) => void;
@@ -94,7 +96,7 @@ export function ShoppingList({
     setAdding(false);
   };
 
-  const exportText = () => `${t.shopping.exportTitle}\n\n${toText(t, groups)}`;
+  const exportText = () => `${t.shopping.exportTitle}${incomplete ? `\n${t.cooking.incompleteCart}` : ''}\n\n${toText(t, groups)}`;
 
   const copy = async () => {
     try {
@@ -118,7 +120,7 @@ export function ShoppingList({
               {t.shopping.uncheckAll(checked.size)}
             </button>
           )}
-          {toBuy.length > 0 && (
+          {toBuy.length > 0 && !incomplete && (
             <button
               onClick={() => onOrder(toBuy.map(({ name, grams }) => ({ name, grams })))}
               className="rounded-full bg-white px-5 py-3 text-[14.5px] font-bold whitespace-nowrap text-tomato transition-colors hover:bg-peach focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -129,6 +131,7 @@ export function ShoppingList({
         </div>
       </div>
 
+      {incomplete && <p className="mt-3 text-sm font-semibold">{t.cooking.incompleteCart}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-bold">
         <button onClick={copy} className="underline-offset-2 hover:underline">
           {t.shopping.copy}
@@ -142,8 +145,8 @@ export function ShoppingList({
 
       {items.length === 0 ? (
         <p className="mt-3 font-semibold">
-          {t.shopping.haveEverything}
-          {pantry.length > 0 && (
+          {incomplete ? t.cooking.incompleteCart : t.shopping.haveEverything}
+          {pantry.length > 0 && !incomplete && (
             <>
               {' '}
               <span className="font-normal text-white/80">{t.shopping.coveredByPantry}</span>{' '}

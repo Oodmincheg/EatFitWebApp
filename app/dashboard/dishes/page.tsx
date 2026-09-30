@@ -74,7 +74,9 @@ export default function DishesPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-display text-[15px] font-extrabold">{dish.name}</p>
                 <p className="mt-0.5 font-mono text-xs font-bold text-latte">
-                  {t.pins.kcal(dish.kcal)} · {t.day.macrosShort(dish.protein_g, dish.fat_g, dish.carbs_g)}
+                  {dish.kcal === undefined ? t.cooking.nutritionUnknown : `${t.pins.kcal(dish.kcal)} · ${t.cooking.recipeTotal}`}
+                  {dish.recipeServings && <> · {t.cooking.portions(dish.recipeServings)}</>}
+                  {dish.classification && <> · {t.cooking[dish.classification]}</>}
                 </p>
                 <p className="mt-0.5 truncate text-xs text-latte">
                   {dish.ingredients.length > 0
@@ -83,6 +85,12 @@ export default function DishesPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {dish.classification === 'experimental' && (
+                  <Button variant="secondary" onClick={async () => {
+                    try { await update(dish.id, { ...dish, classification: 'regular' }); }
+                    catch { toast(t.dishes.form.saveFailed); }
+                  }}>{t.cooking.keepRegular}</Button>
+                )}
                 <Button variant="secondary" className="px-4 py-2 text-xs" onClick={() => setEditing(dish)}>
                   {t.dishes.edit}
                 </Button>
