@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 /* Palette lives on :root so the theme can be swapped at runtime; the theme
    block below only maps Tailwind's color names onto these variables. */
 :root {
